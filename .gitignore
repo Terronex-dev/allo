@@ -1,0 +1,6 @@
+node_modules/
+dist/
+models/
+allo_files/
+*.engram
+.DS_Store
