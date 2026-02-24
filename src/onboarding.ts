@@ -5,11 +5,11 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
 import path from 'node:path';
-import { theme, HEADER, separator } from './theme';
+import { theme, HEADER, separator } from './theme.js';
 import {
     ProviderConfig, saveConfig, getDefaultConfig,
     OllamaLLM, validateKey,
-} from './providers';
+} from './providers.js';
 
 export async function runOnboarding(): Promise<ProviderConfig> {
     const config = getDefaultConfig();

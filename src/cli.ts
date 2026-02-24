@@ -9,11 +9,11 @@ import ora from 'ora';
 import inquirer from 'inquirer';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { Allo } from './allo';
-import { theme, HEADER, HEADER_COMPACT, banner, separator, box, tierLabel } from './theme';
-import { loadConfig, configExists, createLLM, ProviderConfig } from './providers';
-import { runOnboarding } from './onboarding';
-import { discoverBrains, ensureBrainsDir, BrainInfo } from './brains';
+import { Allo } from './allo.js';
+import { theme, HEADER, HEADER_COMPACT, banner, separator, box, tierLabel } from './theme.js';
+import { loadConfig, configExists, createLLM, ProviderConfig } from './providers.js';
+import { runOnboarding } from './onboarding.js';
+import { discoverBrains, ensureBrainsDir, BrainInfo } from './brains.js';
 
 const VERSION = '1.0.0';
 
@@ -367,7 +367,7 @@ async function doConsolidate(a: Allo, cfg: ProviderConfig): Promise<void> {
     // Build summarizer from configured LLM (if available)
     let summarizer: import('@terronex/engram-trace-lite').Summarizer | undefined;
     if (cfg.llm) {
-        const { createLLM: makeLLM } = await import('./providers');
+        const { createLLM: makeLLM } = await import('./providers.js');
         const llm = makeLLM(cfg);
         if (llm) {
             summarizer = {

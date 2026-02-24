@@ -6,15 +6,15 @@
  * @packageDocumentation
  */
 
-export { Allo, AlloConfig, AlloMemory } from './allo';
+export { Allo, AlloConfig, AlloMemory } from './allo.js';
 export type { ConsolidateConfig, ConsolidationReport, Summarizer } from '@terronex/engram-trace-lite';
 export {
     ProviderConfig, LLMProvider, EmbeddingProvider, ChatMessage, ChatResponse,
     AnthropicLLM, OpenAILLM, OllamaLLM, GeminiLLM, OllamaEmbeddings,
     loadConfig, saveConfig, createLLM, validateKey,
-} from './providers';
-export { theme, HEADER, banner } from './theme';
-export { discoverBrains, ensureBrainsDir, BrainInfo, getBrainsDir } from './brains';
+} from './providers.js';
+export { theme, HEADER, banner } from './theme.js';
+export { discoverBrains, ensureBrainsDir, BrainInfo, getBrainsDir } from './brains.js';
 
 // Re-export key types from engram
 export { MemoryNode, EngramFile } from '@terronex/engram';

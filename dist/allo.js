@@ -1,19 +1,13 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Allo = void 0;
-const promises_1 = __importDefault(require("node:fs/promises"));
-const node_path_1 = __importDefault(require("node:path"));
-const engram_1 = require("@terronex/engram");
-const transformers_1 = require("@xenova/transformers");
-const mime_types_1 = __importDefault(require("mime-types"));
-const engram_trace_lite_1 = require("@terronex/engram-trace-lite");
-transformers_1.env.allowRemoteModels = false;
-transformers_1.env.localModelPath = node_path_1.default.join(process.cwd(), 'models/');
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { MemoryTree, createNode, writeEngramFile, readEngramFile, searchNodes, touchNode, DEFAULT_HNSW_CONFIG, generateId as engramGenerateId } from '@terronex/engram';
+import { pipeline, env } from '@xenova/transformers';
+import mime from 'mime-types';
+import { consolidate as traceLiteConsolidate, forget as traceLiteForget, } from '@terronex/engram-trace-lite';
+env.allowRemoteModels = false;
+env.localModelPath = path.join(process.cwd(), 'models/');
 const HNSW_DIMS = 384;
-class Allo {
+export class Allo {
     tree;
     config;
     embedder = null;
@@ -24,7 +18,7 @@ class Allo {
             password: config.password || '',
             embeddingModel: config.embeddingModel || 'Xenova/all-MiniLM-L6-v2',
             maxEmbeddedFileSize: config.maxEmbeddedFileSize || 25,
-            externalStoragePath: config.externalStoragePath || node_path_1.default.join(process.cwd(), 'allo_files'),
+            externalStoragePath: config.externalStoragePath || path.join(process.cwd(), 'allo_files'),
             persona: config.persona || '',
             readOnly: config.readOnly || false,
             ...config,
@@ -33,38 +27,38 @@ class Allo {
     }
     createTree(nodes = []) {
         const hnswConfig = {
-            ...engram_1.DEFAULT_HNSW_CONFIG,
+            ...DEFAULT_HNSW_CONFIG,
             numDimensions: HNSW_DIMS,
             maxElements: 1_000_000,
             space: 'cosine',
         };
-        return new engram_1.MemoryTree(nodes, hnswConfig);
+        return new MemoryTree(nodes, hnswConfig);
     }
     async initialize() {
         if (this.isInitialized)
             return;
         try {
-            this.embedder = await (0, transformers_1.pipeline)('feature-extraction', this.config.embeddingModel);
+            this.embedder = await pipeline('feature-extraction', this.config.embeddingModel);
         }
         catch {
             console.warn(`Could not load local model. Attempting download...`);
-            transformers_1.env.allowRemoteModels = true;
+            env.allowRemoteModels = true;
             try {
-                this.embedder = await (0, transformers_1.pipeline)('feature-extraction', this.config.embeddingModel);
+                this.embedder = await pipeline('feature-extraction', this.config.embeddingModel);
                 console.log('Model downloaded successfully.');
             }
             catch {
                 console.error('Failed to download embedding model. Using random embeddings.');
             }
-            transformers_1.env.allowRemoteModels = false;
+            env.allowRemoteModels = false;
         }
-        await promises_1.default.mkdir(this.config.externalStoragePath, { recursive: true });
+        await fs.mkdir(this.config.externalStoragePath, { recursive: true });
         await this.load();
         this.isInitialized = true;
     }
     async load() {
         try {
-            const engramFile = await (0, engram_1.readEngramFile)(this.config.memoryFile, {
+            const engramFile = await readEngramFile(this.config.memoryFile, {
                 password: this.config.password,
             });
             // Fix Float32Array deserialization: msgpackr stores typed arrays as
@@ -152,11 +146,11 @@ class Allo {
             links: [],
             deltas: [],
         };
-        await (0, engram_1.writeEngramFile)(this.config.memoryFile, engramFile, {
+        await writeEngramFile(this.config.memoryFile, engramFile, {
             password: this.config.password,
             encrypt: !!this.config.password,
         });
-        const stats = await promises_1.default.stat(this.config.memoryFile);
+        const stats = await fs.stat(this.config.memoryFile);
         return {
             nodeCount: nodes.length,
             fileSizeMB: parseFloat((stats.size / 1048576).toFixed(2)),
@@ -176,7 +170,7 @@ class Allo {
         await this.ensureInitialized();
         const embedding = await this.generateEmbedding(text);
         // createNode only accepts { type?, parentId?, tags?, metadata? }
-        const node = (0, engram_1.createNode)(text, { tags, metadata: { charCount: text.length } });
+        const node = createNode(text, { tags, metadata: { charCount: text.length } });
         node.embedding = embedding;
         this.insertNode(node, parentId);
         return node.id;
@@ -185,25 +179,25 @@ class Allo {
         if (this.config.readOnly)
             throw new Error('This brain is read-only. Cannot add memories.');
         await this.ensureInitialized();
-        const stats = await promises_1.default.stat(filePath);
+        const stats = await fs.stat(filePath);
         const fileSizeMB = stats.size / (1024 * 1024);
-        const mimeType = mime_types_1.default.lookup(filePath) || 'application/octet-stream';
+        const mimeType = mime.lookup(filePath) || 'application/octet-stream';
         const contentType = this.mapMimeToContentType(mimeType);
         let data;
         let isExternal = false;
         let storagePath = filePath;
         if (fileSizeMB > this.config.maxEmbeddedFileSize) {
             isExternal = true;
-            const extName = `${(0, engram_1.generateId)()}-${node_path_1.default.basename(filePath)}`;
-            storagePath = node_path_1.default.join(this.config.externalStoragePath, extName);
-            await promises_1.default.copyFile(filePath, storagePath);
+            const extName = `${engramGenerateId()}-${path.basename(filePath)}`;
+            storagePath = path.join(this.config.externalStoragePath, extName);
+            await fs.copyFile(filePath, storagePath);
             data = `ref:${storagePath}`;
         }
         else {
-            data = await promises_1.default.readFile(filePath);
+            data = await fs.readFile(filePath);
         }
-        const embedding = await this.generateEmbedding(`${caption} ${node_path_1.default.basename(filePath)}`);
-        const id = (0, engram_1.generateId)();
+        const embedding = await this.generateEmbedding(`${caption} ${path.basename(filePath)}`);
+        const id = engramGenerateId();
         const now = Date.now();
         // Build MemoryNode directly — createNode only handles text
         const node = {
@@ -248,11 +242,11 @@ class Allo {
                 minScore,
                 timeDecay: 0.2,
             };
-            results = (0, engram_1.searchNodes)(this.tree, queryEmbedding, options);
+            results = searchNodes(this.tree, queryEmbedding, options);
         }
         // Touch accessed nodes (touchNode returns a new object)
         for (const result of results) {
-            const touched = (0, engram_1.touchNode)(result.node);
+            const touched = touchNode(result.node);
             this.tree.update(result.node.id, { temporal: touched.temporal });
         }
         return results.map(r => this.toAlloMemory(r.node, r.score));
@@ -308,7 +302,7 @@ class Allo {
         }
         else {
             const meta = node.metadata.custom;
-            const caption = meta?.caption || node_path_1.default.basename(meta?.originalPath || 'Untitled');
+            const caption = meta?.caption || path.basename(meta?.originalPath || 'Untitled');
             content = `[${node.content.type.toUpperCase()}] ${caption}`;
         }
         return {
@@ -355,6 +349,8 @@ class Allo {
      * decay + dedup + archive still run.
      */
     async consolidate(config, summarizer) {
+        if (this.config.readOnly)
+            throw new Error('This brain is read-only. Cannot consolidate.');
         await this.ensureInitialized();
         const nodes = this.tree.getAll();
         if (nodes.length === 0) {
@@ -382,7 +378,7 @@ class Allo {
             metadata: n.metadata.custom,
         }));
         // Run consolidation
-        const { memories: consolidated, report } = await (0, engram_trace_lite_1.consolidate)(memories, config, summarizer);
+        const { memories: consolidated, report } = await traceLiteConsolidate(memories, config, summarizer);
         // Rebuild tree from consolidated memories
         this.rebuildTree(consolidated);
         // Auto-save after consolidation
@@ -414,7 +410,7 @@ class Allo {
             lastAccessed: new Date(n.temporal.accessed).toISOString(),
             accessCount: n.metadata.custom?.accessCount ?? 0,
         }));
-        const { memories: survivors, forgotten } = (0, engram_trace_lite_1.forget)(memories, queryEmbedding, threshold);
+        const { memories: survivors, forgotten } = traceLiteForget(memories, queryEmbedding, threshold);
         if (forgotten > 0) {
             this.rebuildTree(survivors);
             if (!this.config.readOnly)
@@ -467,6 +463,5 @@ class Allo {
         }
     }
 }
-exports.Allo = Allo;
-exports.default = Allo;
+export default Allo;
 //# sourceMappingURL=allo.js.map

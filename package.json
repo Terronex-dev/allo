@@ -2,6 +2,7 @@
   "name": "@terronex/allo",
   "version": "1.0.0",
   "description": "Allo - Your Neural Memory Assistant. The different kind of AI memory that grows with you.",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -9,9 +10,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "ts-node src/cli.ts",
+    "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
-    "test": "ts-node tests/allo.test.ts",
+    "test": "tsx tests/allo.test.ts",
     "clean": "rm -rf dist allo-memory.engram allo-demo.engram allo-files",
     "demo": "ts-node src/cli.ts demo"
   },
@@ -56,6 +57,7 @@
     "@types/mime-types": "^2.1.4",
     "@types/node": "^20.11.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3"
   },
   "files": [

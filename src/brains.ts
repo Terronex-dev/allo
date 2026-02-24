@@ -43,17 +43,9 @@ export function discoverBrains(configMemoryFile?: string): BrainInfo[] {
                     const stat = fs.statSync(fullPath);
                     if (!stat.isFile()) continue;
 
-                    // Try to peek at metadata for persona
+                    // Persona detection would require async file reading,
+                    // so we'll detect it later during actual load
                     let persona: string | undefined;
-                    try {
-                        // Read first few KB to check for persona in metadata
-                        // The engram format starts with 'ENGRAM' magic bytes
-                        // We'll do a quick parse attempt
-                        const { readEngramFile } = require('@terronex/engram');
-                        const engramData = readEngramFile(fullPath, {});
-                        // This is async, but we need sync for discovery...
-                        // We'll detect persona later during load
-                    } catch { /* ignore parse errors */ }
 
                     const name = file.replace('.engram', '');
                     const displayName = name.split('-').map(

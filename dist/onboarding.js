@@ -1,70 +1,64 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.runOnboarding = runOnboarding;
 /**
  * Allo Onboarding — First-run setup wizard
  */
-const inquirer_1 = __importDefault(require("inquirer"));
-const chalk_1 = __importDefault(require("chalk"));
-const ora_1 = __importDefault(require("ora"));
-const node_path_1 = __importDefault(require("node:path"));
-const theme_1 = require("./theme");
-const providers_1 = require("./providers");
-async function runOnboarding() {
-    const config = (0, providers_1.getDefaultConfig)();
-    console.log(theme_1.HEADER);
-    console.log(theme_1.theme.primaryBold('  Welcome to Allo!\n'));
-    console.log(theme_1.theme.muted("  Let's set up your neural memory in about 60 seconds.\n"));
-    console.log((0, theme_1.separator)(50));
+import inquirer from 'inquirer';
+import chalk from 'chalk';
+import ora from 'ora';
+import path from 'node:path';
+import { theme, HEADER, separator } from './theme.js';
+import { saveConfig, getDefaultConfig, OllamaLLM, validateKey, } from './providers.js';
+export async function runOnboarding() {
+    const config = getDefaultConfig();
+    console.log(HEADER);
+    console.log(theme.primaryBold('  Welcome to Allo!\n'));
+    console.log(theme.muted("  Let's set up your neural memory in about 60 seconds.\n"));
+    console.log(separator(50));
     // Step 1: Memory file location
     console.log('');
-    const { memoryPath } = await inquirer_1.default.prompt([{
+    const { memoryPath } = await inquirer.prompt([{
             type: 'input',
             name: 'memoryPath',
-            message: theme_1.theme.white('Where should your brain live?'),
-            default: node_path_1.default.join(process.cwd(), 'allo-memory.engram'),
+            message: theme.white('Where should your brain live?'),
+            default: path.join(process.cwd(), 'allo-memory.engram'),
         }]);
     // Step 2: Encryption
-    const { encrypt } = await inquirer_1.default.prompt([{
+    const { encrypt } = await inquirer.prompt([{
             type: 'confirm',
             name: 'encrypt',
-            message: theme_1.theme.white('Encrypt your memories? (recommended)'),
+            message: theme.white('Encrypt your memories? (recommended)'),
             default: false,
         }]);
     let password = '';
     if (encrypt) {
-        const { pass } = await inquirer_1.default.prompt([{
+        const { pass } = await inquirer.prompt([{
                 type: 'password',
                 name: 'pass',
-                message: theme_1.theme.white('Enter a passphrase:'),
+                message: theme.white('Enter a passphrase:'),
                 mask: '*',
             }]);
         password = pass;
     }
     // Step 3: Embedding provider
-    console.log('\n' + (0, theme_1.separator)(50));
-    console.log(theme_1.theme.accentBold('\n  Embedding Provider\n'));
-    console.log(theme_1.theme.dim('  Embeddings power semantic search — finding memories by meaning.\n'));
-    const { embeddingChoice } = await inquirer_1.default.prompt([{
+    console.log('\n' + separator(50));
+    console.log(theme.accentBold('\n  Embedding Provider\n'));
+    console.log(theme.dim('  Embeddings power semantic search — finding memories by meaning.\n'));
+    const { embeddingChoice } = await inquirer.prompt([{
             type: 'list',
             name: 'embeddingChoice',
-            message: theme_1.theme.white('Which embedding provider?'),
+            message: theme.white('Which embedding provider?'),
             choices: [
-                { name: `${theme_1.theme.success('Local')} — Xenova/transformers (free, private, no setup)`, value: 'local' },
-                { name: `${theme_1.theme.accent('Ollama')} — nomic-embed-text (free, better quality)`, value: 'ollama' },
-                { name: `${theme_1.theme.primary('OpenAI')} — text-embedding-3-small (paid, best quality)`, value: 'openai' },
+                { name: `${theme.success('Local')} — Xenova/transformers (free, private, no setup)`, value: 'local' },
+                { name: `${theme.accent('Ollama')} — nomic-embed-text (free, better quality)`, value: 'ollama' },
+                { name: `${theme.primary('OpenAI')} — text-embedding-3-small (paid, best quality)`, value: 'openai' },
             ],
         }]);
     if (embeddingChoice === 'ollama') {
-        const spinner = (0, ora_1.default)(theme_1.theme.muted('Checking Ollama...')).start();
-        const available = await providers_1.OllamaLLM.isAvailable();
+        const spinner = ora(theme.muted('Checking Ollama...')).start();
+        const available = await OllamaLLM.isAvailable();
         if (available) {
-            const ollama = new providers_1.OllamaLLM();
+            const ollama = new OllamaLLM();
             const models = await ollama.listModels();
-            spinner.succeed(theme_1.theme.success(`Ollama found! ${models.length} models available`));
+            spinner.succeed(theme.success(`Ollama found! ${models.length} models available`));
             // Known embedding models with descriptions
             const embeddingModels = [
                 { name: 'nomic-embed-text', dims: 768, desc: 'Great all-rounder' },
@@ -79,37 +73,37 @@ async function runOnboarding() {
             const notInstalled = embeddingModels.filter(em => !models.some(m => m.includes(em.name.split('-')[0])));
             const choices = [
                 ...installed.map(em => ({
-                    name: `${theme_1.theme.success('●')} ${em.name} (${em.dims}d) — ${em.desc} ${theme_1.theme.dim('[installed]')}`,
+                    name: `${theme.success('●')} ${em.name} (${em.dims}d) — ${em.desc} ${theme.dim('[installed]')}`,
                     value: em.name,
                 })),
                 ...notInstalled.map(em => ({
-                    name: `${theme_1.theme.dim('○')} ${em.name} (${em.dims}d) — ${em.desc} ${theme_1.theme.dim('[will pull]')}`,
+                    name: `${theme.dim('○')} ${em.name} (${em.dims}d) — ${em.desc} ${theme.dim('[will pull]')}`,
                     value: em.name,
                 })),
             ];
-            const { embedModel } = await inquirer_1.default.prompt([{
+            const { embedModel } = await inquirer.prompt([{
                     type: 'list',
                     name: 'embedModel',
-                    message: theme_1.theme.white('Which embedding model?'),
+                    message: theme.white('Which embedding model?'),
                     choices,
                 }]);
             config.embeddings = { provider: 'ollama', model: embedModel };
             // Check if model needs to be pulled
             const isInstalled = models.some(m => m.includes(embedModel.split('-')[0]));
             if (!isInstalled) {
-                console.log(theme_1.theme.primary(`\n  Model not installed. Run: ollama pull ${embedModel}`));
+                console.log(theme.primary(`\n  Model not installed. Run: ollama pull ${embedModel}`));
             }
         }
         else {
-            spinner.warn(theme_1.theme.error('Ollama not running. Falling back to local embeddings.'));
-            console.log(theme_1.theme.dim('  Start Ollama: ollama serve'));
+            spinner.warn(theme.error('Ollama not running. Falling back to local embeddings.'));
+            console.log(theme.dim('  Start Ollama: ollama serve'));
         }
     }
     else if (embeddingChoice === 'openai') {
-        const { key } = await inquirer_1.default.prompt([{
+        const { key } = await inquirer.prompt([{
                 type: 'password',
                 name: 'key',
-                message: theme_1.theme.white('OpenAI API key:'),
+                message: theme.white('OpenAI API key:'),
                 mask: '*',
             }]);
         config.keys.openai = key;
@@ -117,19 +111,19 @@ async function runOnboarding() {
     }
     // else: keep default local
     // Step 4: LLM provider (for smart recall, chat, summarization)
-    console.log('\n' + (0, theme_1.separator)(50));
-    console.log(theme_1.theme.accentBold('\n  AI Provider (optional)\n'));
-    console.log(theme_1.theme.dim('  An LLM enables smart recall, chat, and auto-summarization.\n'));
-    const { llmChoice } = await inquirer_1.default.prompt([{
+    console.log('\n' + separator(50));
+    console.log(theme.accentBold('\n  AI Provider (optional)\n'));
+    console.log(theme.dim('  An LLM enables smart recall, chat, and auto-summarization.\n'));
+    const { llmChoice } = await inquirer.prompt([{
             type: 'list',
             name: 'llmChoice',
-            message: theme_1.theme.white('Set up an AI provider?'),
+            message: theme.white('Set up an AI provider?'),
             choices: [
-                { name: `${theme_1.theme.accent('Anthropic')} — Claude (API key or OAuth)`, value: 'anthropic' },
-                { name: `${theme_1.theme.success('Ollama')} — Local models (free, private)`, value: 'ollama' },
-                { name: `${theme_1.theme.primary('OpenAI')} — GPT-4o (API key)`, value: 'openai' },
-                { name: `${chalk_1.default.yellow('Google')} — Gemini (API key)`, value: 'google' },
-                { name: theme_1.theme.muted('Skip for now (embedding-only recall)'), value: 'skip' },
+                { name: `${theme.accent('Anthropic')} — Claude (API key or OAuth)`, value: 'anthropic' },
+                { name: `${theme.success('Ollama')} — Local models (free, private)`, value: 'ollama' },
+                { name: `${theme.primary('OpenAI')} — GPT-4o (API key)`, value: 'openai' },
+                { name: `${chalk.yellow('Google')} — Gemini (API key)`, value: 'google' },
+                { name: theme.muted('Skip for now (embedding-only recall)'), value: 'skip' },
             ],
         }]);
     if (llmChoice === 'anthropic') {
@@ -145,65 +139,65 @@ async function runOnboarding() {
         await setupOllama(config);
     }
     // Save config
-    console.log('\n' + (0, theme_1.separator)(50));
-    const spinner = (0, ora_1.default)(theme_1.theme.muted('Saving configuration...')).start();
+    console.log('\n' + separator(50));
+    const spinner = ora(theme.muted('Saving configuration...')).start();
     // Store memory path and password in config (extend the config type)
     config.memoryFile = memoryPath;
     if (password)
         config.password = password;
-    await (0, providers_1.saveConfig)(config);
-    spinner.succeed(theme_1.theme.success('Configuration saved to ~/.allo/config.json'));
+    await saveConfig(config);
+    spinner.succeed(theme.success('Configuration saved to ~/.allo/config.json'));
     console.log('');
-    console.log(theme_1.theme.primaryBold('  🦖 You\'re all set!\n'));
-    console.log(theme_1.theme.white('  Try these commands:'));
-    console.log(theme_1.theme.dim('    allo remember "Your first memory"'));
-    console.log(theme_1.theme.dim('    allo recall "what do I remember?"'));
-    console.log(theme_1.theme.dim('    allo chat'));
+    console.log(theme.primaryBold('  🦖 You\'re all set!\n'));
+    console.log(theme.white('  Try these commands:'));
+    console.log(theme.dim('    allo remember "Your first memory"'));
+    console.log(theme.dim('    allo recall "what do I remember?"'));
+    console.log(theme.dim('    allo chat'));
     console.log('');
     return config;
 }
 // ============== Provider Setup Helpers ==============
 async function setupAnthropic(config) {
-    const { authMethod } = await inquirer_1.default.prompt([{
+    const { authMethod } = await inquirer.prompt([{
             type: 'list',
             name: 'authMethod',
-            message: theme_1.theme.white('Authentication method:'),
+            message: theme.white('Authentication method:'),
             choices: [
-                { name: `${theme_1.theme.accent('OAuth')} — Sign in with your Anthropic account (recommended)`, value: 'oauth' },
-                { name: `${theme_1.theme.muted('API Key')} — Enter an API key manually`, value: 'apikey' },
-                { name: `${theme_1.theme.muted('Auto-detect')} — Check env vars and Claude CLI`, value: 'auto' },
+                { name: `${theme.accent('OAuth')} — Sign in with your Anthropic account (recommended)`, value: 'oauth' },
+                { name: `${theme.muted('API Key')} — Enter an API key manually`, value: 'apikey' },
+                { name: `${theme.muted('Auto-detect')} — Check env vars and Claude CLI`, value: 'auto' },
             ],
         }]);
     if (authMethod === 'oauth') {
         console.log('');
-        console.log(theme_1.theme.accent('  Anthropic OAuth Setup'));
-        console.log(theme_1.theme.dim('  ─────────────────────'));
+        console.log(theme.accent('  Anthropic OAuth Setup'));
+        console.log(theme.dim('  ─────────────────────'));
         console.log('');
-        console.log(theme_1.theme.white('  To authenticate with OAuth:'));
-        console.log(theme_1.theme.dim('  1. Run: npx @anthropic-ai/claude-code auth'));
-        console.log(theme_1.theme.dim('  2. Follow the browser prompts to sign in'));
-        console.log(theme_1.theme.dim('  3. Copy the OAuth token (starts with sk-ant-oat-...)'));
+        console.log(theme.white('  To authenticate with OAuth:'));
+        console.log(theme.dim('  1. Run: npx @anthropic-ai/claude-code auth'));
+        console.log(theme.dim('  2. Follow the browser prompts to sign in'));
+        console.log(theme.dim('  3. Copy the OAuth token (starts with sk-ant-oat-...)'));
         console.log('');
-        const { token } = await inquirer_1.default.prompt([{
+        const { token } = await inquirer.prompt([{
                 type: 'password',
                 name: 'token',
-                message: theme_1.theme.white('Paste OAuth token:'),
+                message: theme.white('Paste OAuth token:'),
                 mask: '*',
             }]);
         if (token) {
-            const spinner = (0, ora_1.default)(theme_1.theme.muted('Validating OAuth token...')).start();
-            const valid = await (0, providers_1.validateKey)('anthropic', token);
+            const spinner = ora(theme.muted('Validating OAuth token...')).start();
+            const valid = await validateKey('anthropic', token);
             if (valid) {
-                spinner.succeed(theme_1.theme.success('OAuth token verified!'));
+                spinner.succeed(theme.success('OAuth token verified!'));
                 config.keys.anthropic = token;
                 config.llm = { provider: 'anthropic', model: 'claude-sonnet-4-20250514' };
             }
             else {
-                spinner.warn(theme_1.theme.error('OAuth token validation failed.'));
-                const { saveAnyway } = await inquirer_1.default.prompt([{
+                spinner.warn(theme.error('OAuth token validation failed.'));
+                const { saveAnyway } = await inquirer.prompt([{
                         type: 'confirm',
                         name: 'saveAnyway',
-                        message: theme_1.theme.white('Save the token anyway? (you can fix it later with allo setup)'),
+                        message: theme.white('Save the token anyway? (you can fix it later with allo setup)'),
                         default: true,
                     }]);
                 if (saveAnyway) {
@@ -214,26 +208,26 @@ async function setupAnthropic(config) {
         }
     }
     else if (authMethod === 'apikey') {
-        const { key } = await inquirer_1.default.prompt([{
+        const { key } = await inquirer.prompt([{
                 type: 'password',
                 name: 'key',
-                message: theme_1.theme.white('Anthropic API key:'),
+                message: theme.white('Anthropic API key:'),
                 mask: '*',
             }]);
         if (key) {
-            const spinner = (0, ora_1.default)(theme_1.theme.muted('Validating API key...')).start();
-            const valid = await (0, providers_1.validateKey)('anthropic', key);
+            const spinner = ora(theme.muted('Validating API key...')).start();
+            const valid = await validateKey('anthropic', key);
             if (valid) {
-                spinner.succeed(theme_1.theme.success('API key verified!'));
+                spinner.succeed(theme.success('API key verified!'));
                 config.keys.anthropic = key;
                 config.llm = { provider: 'anthropic', model: 'claude-sonnet-4-20250514' };
             }
             else {
-                spinner.warn(theme_1.theme.error('API key validation failed.'));
-                const { saveAnyway } = await inquirer_1.default.prompt([{
+                spinner.warn(theme.error('API key validation failed.'));
+                const { saveAnyway } = await inquirer.prompt([{
                         type: 'confirm',
                         name: 'saveAnyway',
-                        message: theme_1.theme.white('Save the key anyway?'),
+                        message: theme.white('Save the key anyway?'),
                         default: true,
                     }]);
                 if (saveAnyway) {
@@ -245,23 +239,23 @@ async function setupAnthropic(config) {
     }
     else {
         // Auto-detect
-        const spinner = (0, ora_1.default)(theme_1.theme.muted('Searching for Anthropic credentials...')).start();
+        const spinner = ora(theme.muted('Searching for Anthropic credentials...')).start();
         const envKey = process.env.ANTHROPIC_API_KEY;
         if (envKey) {
-            spinner.succeed(theme_1.theme.success('Found ANTHROPIC_API_KEY in environment'));
+            spinner.succeed(theme.success('Found ANTHROPIC_API_KEY in environment'));
             config.keys.anthropic = envKey;
             config.llm = { provider: 'anthropic', model: 'claude-sonnet-4-20250514' };
         }
         else {
-            spinner.warn(theme_1.theme.error('No Anthropic credentials found. Set ANTHROPIC_API_KEY or use OAuth.'));
+            spinner.warn(theme.error('No Anthropic credentials found. Set ANTHROPIC_API_KEY or use OAuth.'));
         }
     }
     // Model selection if provider was configured
     if (config.llm?.provider === 'anthropic') {
-        const { model } = await inquirer_1.default.prompt([{
+        const { model } = await inquirer.prompt([{
                 type: 'list',
                 name: 'model',
-                message: theme_1.theme.white('Default Claude model:'),
+                message: theme.white('Default Claude model:'),
                 choices: [
                     { name: 'Claude Sonnet 4 (balanced)', value: 'claude-sonnet-4-20250514' },
                     { name: 'Claude Opus 4 (most capable)', value: 'claude-opus-4-20250514' },
@@ -274,14 +268,14 @@ async function setupAnthropic(config) {
 async function setupOpenAI(config) {
     const key = config.keys.openai || process.env.OPENAI_API_KEY;
     if (key) {
-        console.log(theme_1.theme.dim('  Using existing OpenAI key'));
+        console.log(theme.dim('  Using existing OpenAI key'));
         config.keys.openai = key;
     }
     else {
-        const { apiKey } = await inquirer_1.default.prompt([{
+        const { apiKey } = await inquirer.prompt([{
                 type: 'password',
                 name: 'apiKey',
-                message: theme_1.theme.white('OpenAI API key:'),
+                message: theme.white('OpenAI API key:'),
                 mask: '*',
             }]);
         config.keys.openai = apiKey;
@@ -291,14 +285,14 @@ async function setupOpenAI(config) {
 async function setupGoogle(config) {
     const key = process.env.GEMINI_API_KEY;
     if (key) {
-        console.log(theme_1.theme.dim('  Using existing GEMINI_API_KEY'));
+        console.log(theme.dim('  Using existing GEMINI_API_KEY'));
         config.keys.google = key;
     }
     else {
-        const { apiKey } = await inquirer_1.default.prompt([{
+        const { apiKey } = await inquirer.prompt([{
                 type: 'password',
                 name: 'apiKey',
-                message: theme_1.theme.white('Google AI Studio API key:'),
+                message: theme.white('Google AI Studio API key:'),
                 mask: '*',
             }]);
         config.keys.google = apiKey;
@@ -306,26 +300,26 @@ async function setupGoogle(config) {
     config.llm = { provider: 'google', model: 'gemini-2.5-flash' };
 }
 async function setupOllama(config) {
-    const spinner = (0, ora_1.default)(theme_1.theme.muted('Checking Ollama...')).start();
-    const available = await providers_1.OllamaLLM.isAvailable();
+    const spinner = ora(theme.muted('Checking Ollama...')).start();
+    const available = await OllamaLLM.isAvailable();
     if (!available) {
-        spinner.fail(theme_1.theme.error('Ollama not running.'));
-        console.log(theme_1.theme.dim('  Install: https://ollama.com'));
-        console.log(theme_1.theme.dim('  Start:   ollama serve'));
+        spinner.fail(theme.error('Ollama not running.'));
+        console.log(theme.dim('  Install: https://ollama.com'));
+        console.log(theme.dim('  Start:   ollama serve'));
         return;
     }
-    const ollama = new providers_1.OllamaLLM();
+    const ollama = new OllamaLLM();
     const models = await ollama.listModels();
-    spinner.succeed(theme_1.theme.success(`Ollama running — ${models.length} models available`));
+    spinner.succeed(theme.success(`Ollama running — ${models.length} models available`));
     if (models.length === 0) {
-        console.log(theme_1.theme.dim('  Pull a model: ollama pull llama3.2'));
+        console.log(theme.dim('  Pull a model: ollama pull llama3.2'));
         config.llm = { provider: 'ollama', model: 'llama3.2' };
         return;
     }
-    const { model } = await inquirer_1.default.prompt([{
+    const { model } = await inquirer.prompt([{
             type: 'list',
             name: 'model',
-            message: theme_1.theme.white('Select a model:'),
+            message: theme.white('Select a model:'),
             choices: models.map(m => ({ name: m, value: m })),
         }]);
     config.llm = { provider: 'ollama', model };

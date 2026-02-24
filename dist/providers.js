@@ -1,41 +1,29 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.OllamaEmbeddings = exports.GeminiLLM = exports.OllamaLLM = exports.OpenAILLM = exports.AnthropicLLM = void 0;
-exports.loadConfig = loadConfig;
-exports.saveConfig = saveConfig;
-exports.getDefaultConfig = getDefaultConfig;
-exports.configExists = configExists;
-exports.createLLM = createLLM;
-exports.validateKey = validateKey;
 /**
  * Allo Provider System
  *
  * Multi-provider LLM + embedding support with OAuth, API keys, and local models.
  * Adapted from Rex's battle-tested provider architecture.
  */
-const promises_1 = __importDefault(require("node:fs/promises"));
-const node_fs_1 = require("node:fs");
-const node_path_1 = __importDefault(require("node:path"));
-const CONFIG_DIR = node_path_1.default.join(process.env.HOME || '~', '.allo');
-const CONFIG_FILE = node_path_1.default.join(CONFIG_DIR, 'config.json');
+import fs from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+const CONFIG_DIR = path.join(process.env.HOME || '~', '.allo');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 // ============== Config Management ==============
-async function loadConfig() {
+export async function loadConfig() {
     try {
-        const raw = await promises_1.default.readFile(CONFIG_FILE, 'utf-8');
+        const raw = await fs.readFile(CONFIG_FILE, 'utf-8');
         return JSON.parse(raw);
     }
     catch {
         return getDefaultConfig();
     }
 }
-async function saveConfig(config) {
-    await promises_1.default.mkdir(CONFIG_DIR, { recursive: true });
-    await promises_1.default.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
+export async function saveConfig(config) {
+    await fs.mkdir(CONFIG_DIR, { recursive: true });
+    await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
-function getDefaultConfig() {
+export function getDefaultConfig() {
     return {
         embeddings: { provider: 'local', model: 'Xenova/all-MiniLM-L6-v2' },
         llm: undefined,
@@ -43,11 +31,11 @@ function getDefaultConfig() {
         ollamaUrl: 'http://localhost:11434',
     };
 }
-function configExists() {
-    return (0, node_fs_1.existsSync)(CONFIG_FILE);
+export function configExists() {
+    return existsSync(CONFIG_FILE);
 }
 // ============== Anthropic Provider (API key + OAuth) ==============
-class AnthropicLLM {
+export class AnthropicLLM {
     name = 'anthropic';
     apiKey;
     isOAuth;
@@ -98,9 +86,8 @@ class AnthropicLLM {
         };
     }
 }
-exports.AnthropicLLM = AnthropicLLM;
 // ============== OpenAI-compatible Provider ==============
-class OpenAILLM {
+export class OpenAILLM {
     name;
     apiKey;
     baseUrl;
@@ -138,9 +125,8 @@ class OpenAILLM {
         };
     }
 }
-exports.OpenAILLM = OpenAILLM;
 // ============== Ollama Provider ==============
-class OllamaLLM {
+export class OllamaLLM {
     name = 'ollama';
     baseUrl;
     constructor(baseUrl = 'http://localhost:11434') {
@@ -189,9 +175,8 @@ class OllamaLLM {
         }
     }
 }
-exports.OllamaLLM = OllamaLLM;
 // ============== Google Gemini Provider ==============
-class GeminiLLM {
+export class GeminiLLM {
     name = 'google';
     apiKey;
     constructor(apiKey) {
@@ -225,9 +210,8 @@ class GeminiLLM {
         };
     }
 }
-exports.GeminiLLM = GeminiLLM;
 // ============== Ollama Embeddings ==============
-class OllamaEmbeddings {
+export class OllamaEmbeddings {
     name = 'ollama';
     dims;
     baseUrl;
@@ -249,9 +233,8 @@ class OllamaEmbeddings {
         return new Float32Array(data.embedding);
     }
 }
-exports.OllamaEmbeddings = OllamaEmbeddings;
 // ============== Provider Factory ==============
-function createLLM(config) {
+export function createLLM(config) {
     if (!config.llm)
         return null;
     const { provider, model } = config.llm;
@@ -290,9 +273,9 @@ function detectAnthropicKey() {
         return process.env.ANTHROPIC_API_KEY;
     // 2. OpenClaw auth profiles
     try {
-        const authPath = node_path_1.default.join(process.env.HOME || '', '.openclaw', 'agents', 'main', 'agent', 'auth-profiles.json');
-        if ((0, node_fs_1.existsSync)(authPath)) {
-            const data = JSON.parse((0, node_fs_1.readFileSync)(authPath, 'utf-8'));
+        const authPath = path.join(process.env.HOME || '', '.openclaw', 'agents', 'main', 'agent', 'auth-profiles.json');
+        if (existsSync(authPath)) {
+            const data = JSON.parse(readFileSync(authPath, 'utf-8'));
             const profiles = data.profiles || {};
             for (const [, profile] of Object.entries(profiles)) {
                 if (profile.provider === 'anthropic' && profile.token) {
@@ -304,9 +287,9 @@ function detectAnthropicKey() {
     catch { }
     // 3. Claude CLI OAuth token
     try {
-        const claudeConfig = node_path_1.default.join(process.env.HOME || '', '.claude', 'config.json');
-        if ((0, node_fs_1.existsSync)(claudeConfig)) {
-            const data = JSON.parse((0, node_fs_1.readFileSync)(claudeConfig, 'utf-8'));
+        const claudeConfig = path.join(process.env.HOME || '', '.claude', 'config.json');
+        if (existsSync(claudeConfig)) {
+            const data = JSON.parse(readFileSync(claudeConfig, 'utf-8'));
             if (data.oauthToken)
                 return data.oauthToken;
         }
@@ -317,7 +300,7 @@ function detectAnthropicKey() {
 /**
  * Validate that a key works for the given provider.
  */
-async function validateKey(provider, key, baseUrl) {
+export async function validateKey(provider, key, baseUrl) {
     try {
         switch (provider) {
             case 'anthropic': {
