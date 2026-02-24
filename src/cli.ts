@@ -240,6 +240,19 @@ async function doRemember(a: Allo): Promise<void> {
     console.log(theme.dim(`  Brain: ${nodeCount} memories (${fileSizeMB} MB)\n`));
 }
 
+function truncate(text: string, maxLen: number): string {
+    // Collapse whitespace and newlines, then truncate
+    const clean = text.replace(/\s+/g, ' ').trim();
+    if (clean.length <= maxLen) return clean;
+    return clean.slice(0, maxLen - 1) + '…';
+}
+
+function formatDate(ts: number): string {
+    const d = new Date(ts);
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[d.getMonth()]} ${d.getDate()}`;
+}
+
 async function doRecall(a: Allo): Promise<void> {
     const { query } = await inquirer.prompt([{
         type: 'input',
@@ -257,16 +270,45 @@ async function doRecall(a: Allo): Promise<void> {
         return;
     }
 
-    console.log(theme.accent(`\n  Found ${results.length} memor${results.length === 1 ? 'y' : 'ies'}:\n`));
-    results.forEach((mem, i) => {
-        const tier = tierLabel[mem.tier] || mem.tier;
-        const score = mem.score !== undefined ? theme.dim(` ${(mem.score * 100).toFixed(0)}%`) : '';
-        console.log(`  ${theme.primaryBold(`${i + 1}.`)} [${tier}] ${theme.white(mem.content)}${score}`);
-        console.log(theme.dim(`     ${new Date(mem.timestamp).toLocaleDateString()}`));
-        if (mem.tags.length > 0) {
-            console.log(theme.dim(`     Tags: ${mem.tags.join(', ')}`));
+    // Compact list view
+    while (true) {
+        console.log(theme.accent(`\n  Found ${results.length} memor${results.length === 1 ? 'y' : 'ies'}:\n`));
+        results.forEach((mem, i) => {
+            const tier = tierLabel[mem.tier] || mem.tier;
+            const score = mem.score !== undefined ? `${(mem.score * 100).toFixed(0)}%` : '';
+            const date = formatDate(mem.timestamp);
+            const tags = mem.tags.length > 0 ? theme.dim(` [${mem.tags.join(', ')}]`) : '';
+            const preview = truncate(mem.content, 72);
+            console.log(`  ${theme.primaryBold(`${i + 1}.`)} [${tier}] ${theme.dim(score.padEnd(4))} ${theme.white(preview)}`);
+            console.log(`     ${theme.dim(date)}${tags}`);
+        });
+
+        // Interactive selection
+        const { selection } = await inquirer.prompt([{
+            type: 'input',
+            name: 'selection',
+            message: theme.muted(`View [1-${results.length}], or Enter to go back:`),
+        }]);
+
+        if (!selection) break;
+
+        const idx = parseInt(selection) - 1;
+        if (idx >= 0 && idx < results.length) {
+            const mem = results[idx];
+            const tier = tierLabel[mem.tier] || mem.tier;
+            const score = mem.score !== undefined ? ` ${(mem.score * 100).toFixed(0)}%` : '';
+            console.log('');
+            console.log(theme.primaryBold(`  Memory #${idx + 1}`) + theme.dim(` — [${tier}]${score}`));
+            console.log(theme.dim(`  ID: ${mem.id}`));
+            console.log(theme.dim(`  Date: ${new Date(mem.timestamp).toLocaleString()}`));
+            if (mem.tags.length > 0) console.log(theme.dim(`  Tags: ${mem.tags.join(', ')}`));
+            console.log(separator(60));
+            console.log(theme.white(`  ${mem.content}`));
+            console.log(separator(60));
+        } else {
+            console.log(theme.dim('  Invalid selection.'));
         }
-    });
+    }
     console.log('');
 }
 
@@ -531,6 +573,7 @@ program
     .description('Search your memories')
     .option('-l, --limit <number>', 'Max results', '8')
     .option('-f, --file <path>', 'Memory file path')
+    .option('-b, --brief', 'One-line summaries only (no interactive selection)')
     .action(async (query, options) => {
         const a = await getAllo(options);
         const spinner = ora(theme.muted(`Searching for "${query}"...`)).start();
@@ -542,15 +585,50 @@ program
             return;
         }
 
+        // Always show compact list first
         console.log(theme.accent(`\nFound ${memories.length} memor${memories.length === 1 ? 'y' : 'ies'}:\n`));
         memories.forEach((mem, i) => {
             const tier = tierLabel[mem.tier] || mem.tier;
-            const score = mem.score !== undefined ? theme.dim(` ${(mem.score * 100).toFixed(0)}%`) : '';
-            console.log(`${theme.primaryBold(`${i + 1}.`)} [${tier}] ${theme.white(mem.content)}${score}`);
-            console.log(theme.dim(`   ${new Date(mem.timestamp).toLocaleDateString()} | ID: ${mem.id}`));
-            if (mem.tags.length > 0) console.log(theme.dim(`   Tags: ${mem.tags.join(', ')}`));
-            console.log('');
+            const score = mem.score !== undefined ? `${(mem.score * 100).toFixed(0)}%` : '';
+            const date = formatDate(mem.timestamp);
+            const tags = mem.tags.length > 0 ? theme.dim(` [${mem.tags.join(', ')}]`) : '';
+            const preview = truncate(mem.content, 72);
+            console.log(`${theme.primaryBold(`${i + 1}.`)} [${tier}] ${theme.dim(score.padEnd(4))} ${theme.white(preview)}`);
+            console.log(`   ${theme.dim(date)}${tags}`);
         });
+
+        if (options.brief) {
+            console.log('');
+            return;
+        }
+
+        // Interactive selection loop
+        while (true) {
+            const { selection } = await inquirer.prompt([{
+                type: 'input',
+                name: 'selection',
+                message: theme.muted(`View [1-${memories.length}], or Enter to exit:`),
+            }]);
+
+            if (!selection) break;
+
+            const idx = parseInt(selection) - 1;
+            if (idx >= 0 && idx < memories.length) {
+                const mem = memories[idx];
+                const tier = tierLabel[mem.tier] || mem.tier;
+                const score = mem.score !== undefined ? ` ${(mem.score * 100).toFixed(0)}%` : '';
+                console.log('');
+                console.log(theme.primaryBold(`Memory #${idx + 1}`) + theme.dim(` — [${tier}]${score}`));
+                console.log(theme.dim(`ID: ${mem.id}`));
+                console.log(theme.dim(`Date: ${new Date(mem.timestamp).toLocaleString()}`));
+                if (mem.tags.length > 0) console.log(theme.dim(`Tags: ${mem.tags.join(', ')}`));
+                console.log(separator(60));
+                console.log(theme.white(mem.content));
+                console.log(separator(60));
+            } else {
+                console.log(theme.dim('Invalid selection.'));
+            }
+        }
     });
 
 program
