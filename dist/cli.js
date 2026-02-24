@@ -1,5 +1,38 @@
 #!/usr/bin/env node
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -82,6 +115,10 @@ async function interactiveMenu() {
         if (cfg.llm) {
             choices.push({ name: theme_1.theme.primary('  Chat' + (personaName ? ` with ${personaName}` : ' with your memories')), value: 'chat' });
         }
+        if (!isReadOnly) {
+            choices.push({ name: theme_1.theme.white('  Forget a memory'), value: 'forget' });
+            choices.push({ name: theme_1.theme.white('  Consolidate brain'), value: 'consolidate' });
+        }
         choices.push({ name: theme_1.theme.white('  Switch brain'), value: 'switch' }, { name: theme_1.theme.white('  Browse memory tree'), value: 'browse' }, { name: theme_1.theme.muted('  Stats & health'), value: 'stats' }, { name: theme_1.theme.muted('  Settings'), value: 'settings' }, { name: theme_1.theme.dim('  Exit'), value: 'exit' });
         const { action } = await inquirer_1.default.prompt([{
                 type: 'list',
@@ -109,6 +146,12 @@ async function interactiveMenu() {
                 }
                 break;
             }
+            case 'forget':
+                await doForget(a);
+                break;
+            case 'consolidate':
+                await doConsolidate(a, cfg);
+                break;
             case 'stats':
                 await doStats(a);
                 break;
@@ -283,6 +326,69 @@ async function doChat(a, persona) {
         }
     }
 }
+async function doForget(a) {
+    const { query } = await inquirer_1.default.prompt([{
+            type: 'input',
+            name: 'query',
+            message: theme_1.theme.white('What should I forget?'),
+        }]);
+    if (!query)
+        return;
+    const { confirm } = await inquirer_1.default.prompt([{
+            type: 'confirm',
+            name: 'confirm',
+            message: theme_1.theme.error(`Forget all memories matching "${query}"? This cannot be undone.`),
+            default: false,
+        }]);
+    if (!confirm) {
+        console.log(theme_1.theme.dim('\n  Nothing forgotten.\n'));
+        return;
+    }
+    const spinner = (0, ora_1.default)(theme_1.theme.muted('Forgetting...')).start();
+    const forgotten = await a.forget(query);
+    if (forgotten > 0) {
+        spinner.succeed(theme_1.theme.success(`Forgotten ${forgotten} memor${forgotten === 1 ? 'y' : 'ies'}.`));
+    }
+    else {
+        spinner.info(theme_1.theme.dim('No matching memories found.'));
+    }
+    console.log('');
+}
+async function doConsolidate(a, cfg) {
+    const { nodeCount } = a.getStats();
+    console.log(theme_1.theme.accent(`\n  Consolidating ${nodeCount} memories...\n`));
+    // Build summarizer from configured LLM (if available)
+    let summarizer;
+    if (cfg.llm) {
+        const { createLLM: makeLLM } = await Promise.resolve().then(() => __importStar(require('./providers')));
+        const llm = makeLLM(cfg);
+        if (llm) {
+            summarizer = {
+                summarize: async (texts) => {
+                    const response = await llm.chat({
+                        model: cfg.llm.model,
+                        system: 'You are a memory consolidation system. Combine the following related memories into a single concise summary. Preserve all key facts and decisions. Remove redundancy. Output only the summary.',
+                        messages: [{ role: 'user', content: texts.join('\n---\n') }],
+                    });
+                    return response.content;
+                },
+            };
+        }
+    }
+    const spinner = (0, ora_1.default)(theme_1.theme.muted('Running consolidation pipeline...')).start();
+    const report = await a.consolidate(undefined, summarizer);
+    spinner.succeed(theme_1.theme.success('Consolidation complete!'));
+    console.log('');
+    console.log(`  ${theme_1.theme.white('Decayed:')}       ${report.decayed} memories aged to next tier`);
+    console.log(`  ${theme_1.theme.white('Deduplicated:')}  ${report.deduplicated} duplicates removed`);
+    if (report.clustersFound > 0) {
+        console.log(`  ${theme_1.theme.white('Clusters:')}      ${report.clustersFound} found, ${report.summarized} memories merged`);
+    }
+    console.log(`  ${theme_1.theme.white('Archived:')}      ${report.archived} old memories truncated`);
+    console.log(`  ${theme_1.theme.white('Result:')}        ${report.before.total} → ${report.after.total} memories`);
+    console.log(`  ${theme_1.theme.white('Duration:')}      ${report.durationMs}ms`);
+    console.log('');
+}
 async function doStats(a) {
     const { nodeCount, fileSizeMB } = await a.save();
     const all = a.getAll();
@@ -449,6 +555,44 @@ program
     .description('Re-run the setup wizard')
     .action(async () => {
     config = await (0, onboarding_1.runOnboarding)();
+});
+program
+    .command('consolidate')
+    .description('Run memory consolidation (decay, dedup, cluster, summarize)')
+    .option('-f, --file <path>', 'Memory file path')
+    .action(async (options) => {
+    const cfg = await ensureSetup();
+    const a = await getAllo(options);
+    await doConsolidate(a, cfg);
+});
+program
+    .command('forget <query>')
+    .description('Forget memories matching a semantic query')
+    .option('-t, --threshold <number>', 'Similarity threshold (0-1)', '0.7')
+    .option('-f, --file <path>', 'Memory file path')
+    .option('--force', 'Skip confirmation prompt')
+    .action(async (query, options) => {
+    const a = await getAllo(options);
+    if (!options.force) {
+        const { confirm } = await inquirer_1.default.prompt([{
+                type: 'confirm',
+                name: 'confirm',
+                message: theme_1.theme.error(`Forget all memories matching "${query}"? This cannot be undone.`),
+                default: false,
+            }]);
+        if (!confirm) {
+            console.log(theme_1.theme.dim('Nothing forgotten.'));
+            return;
+        }
+    }
+    const spinner = (0, ora_1.default)(theme_1.theme.muted('Forgetting...')).start();
+    const forgotten = await a.forget(query, parseFloat(options.threshold));
+    if (forgotten > 0) {
+        spinner.succeed(theme_1.theme.success(`Forgotten ${forgotten} memor${forgotten === 1 ? 'y' : 'ies'}.`));
+    }
+    else {
+        spinner.info(theme_1.theme.dim('No matching memories found.'));
+    }
 });
 program
     .command('demo')

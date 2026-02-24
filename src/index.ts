@@ -7,6 +7,7 @@
  */
 
 export { Allo, AlloConfig, AlloMemory } from './allo';
+export type { ConsolidateConfig, ConsolidationReport, Summarizer } from '@terronex/engram-trace-lite';
 export {
     ProviderConfig, LLMProvider, EmbeddingProvider, ChatMessage, ChatResponse,
     AnthropicLLM, OpenAILLM, OllamaLLM, GeminiLLM, OllamaEmbeddings,

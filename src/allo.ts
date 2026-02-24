@@ -7,6 +7,14 @@ import {
 } from '@terronex/engram';
 import { pipeline, env } from '@xenova/transformers';
 import mime from 'mime-types';
+import {
+    consolidate as traceLiteConsolidate,
+    forget as traceLiteForget,
+    type Memory as TraceLiteMemory,
+    type ConsolidateConfig,
+    type ConsolidationReport,
+    type Summarizer,
+} from '@terronex/engram-trace-lite';
 
 env.allowRemoteModels = false;
 env.localModelPath = path.join(process.cwd(), 'models/');
@@ -379,6 +387,131 @@ export class Allo {
     /** Get all memories without search (for stats, export, etc.) */
     getAll(): AlloMemory[] {
         return this.tree.getAll().map(node => this.toAlloMemory(node));
+    }
+
+    // =========================================================================
+    // Consolidation (powered by @terronex/engram-trace-lite)
+    // =========================================================================
+
+    /**
+     * Run memory consolidation: decay tiers, remove duplicates,
+     * cluster and summarize related memories, archive old content.
+     *
+     * Summarization requires a Summarizer (any LLM). Without one,
+     * decay + dedup + archive still run.
+     */
+    async consolidate(
+        config?: ConsolidateConfig,
+        summarizer?: Summarizer,
+    ): Promise<ConsolidationReport> {
+        await this.ensureInitialized();
+        const nodes = this.tree.getAll();
+        if (nodes.length === 0) {
+            return {
+                timestamp: new Date().toISOString(),
+                durationMs: 0,
+                before: { total: 0, byTier: { hot: 0, warm: 0, cold: 0, archive: 0 } },
+                after: { total: 0, byTier: { hot: 0, warm: 0, cold: 0, archive: 0 } },
+                decayed: 0, deduplicated: 0, clustersFound: 0, summarized: 0, archived: 0,
+            };
+        }
+
+        // Convert MemoryNode[] to TraceLiteMemory[]
+        const memories: TraceLiteMemory[] = nodes.map(n => ({
+            id: n.id,
+            content: typeof n.content.data === 'string' ? n.content.data : '[binary]',
+            embedding: n.embedding instanceof Float32Array
+                ? n.embedding
+                : new Float32Array(n.embedding as any),
+            tags: n.metadata.tags || [],
+            importance: n.quality.score,
+            tier: n.temporal.decayTier as TraceLiteMemory['tier'],
+            createdAt: new Date(n.temporal.created).toISOString(),
+            lastAccessed: new Date(n.temporal.accessed).toISOString(),
+            accessCount: (n.metadata.custom as any)?.accessCount ?? 0,
+            metadata: n.metadata.custom as Record<string, unknown> | undefined,
+        }));
+
+        // Run consolidation
+        const { memories: consolidated, report } = await traceLiteConsolidate(
+            memories, config, summarizer,
+        );
+
+        // Rebuild tree from consolidated memories
+        this.rebuildTree(consolidated);
+
+        // Auto-save after consolidation
+        if (!this.config.readOnly) {
+            await this.save();
+        }
+
+        return report;
+    }
+
+    /**
+     * Forget memories semantically matching a query.
+     * Returns the number of memories removed.
+     */
+    async forget(query: string, threshold = 0.7): Promise<number> {
+        if (this.config.readOnly) throw new Error('This brain is read-only. Cannot forget.');
+        await this.ensureInitialized();
+
+        const queryEmbedding = await this.generateEmbedding(query);
+        const nodes = this.tree.getAll();
+
+        const memories: TraceLiteMemory[] = nodes.map(n => ({
+            id: n.id,
+            content: typeof n.content.data === 'string' ? n.content.data : '[binary]',
+            embedding: n.embedding instanceof Float32Array
+                ? n.embedding
+                : new Float32Array(n.embedding as any),
+            tags: n.metadata.tags || [],
+            importance: n.quality.score,
+            tier: n.temporal.decayTier as TraceLiteMemory['tier'],
+            createdAt: new Date(n.temporal.created).toISOString(),
+            lastAccessed: new Date(n.temporal.accessed).toISOString(),
+            accessCount: (n.metadata.custom as any)?.accessCount ?? 0,
+        }));
+
+        const { memories: survivors, forgotten } = traceLiteForget(
+            memories, queryEmbedding, threshold,
+        );
+
+        if (forgotten > 0) {
+            this.rebuildTree(survivors);
+            if (!this.config.readOnly) await this.save();
+        }
+
+        return forgotten;
+    }
+
+    /**
+     * Rebuild the internal MemoryTree from TraceLite Memory[].
+     * Maps consolidated memories back to MemoryNode format.
+     */
+    private rebuildTree(memories: TraceLiteMemory[]): void {
+        const nodes: MemoryNode[] = memories.map(m => ({
+            id: m.id,
+            parentId: null,
+            children: [],
+            depth: 0,
+            path: `/${m.id}`,
+            content: { type: 'text' as ContentType, data: m.content },
+            embedding: m.embedding,
+            temporal: {
+                created: new Date(m.createdAt).getTime(),
+                modified: Date.now(),
+                accessed: new Date(m.lastAccessed).getTime(),
+                decayTier: m.tier,
+            },
+            quality: { score: m.importance, confidence: 0.8, source: 'direct' },
+            metadata: {
+                tags: m.tags,
+                custom: { ...m.metadata, accessCount: m.accessCount },
+            },
+        }));
+
+        this.tree = this.createTree(nodes);
     }
 
     private async ensureInitialized(): Promise<void> {

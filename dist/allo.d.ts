@@ -1,3 +1,4 @@
+import { type ConsolidateConfig, type ConsolidationReport, type Summarizer } from '@terronex/engram-trace-lite';
 export interface AlloConfig {
     memoryFile?: string;
     password?: string;
@@ -56,6 +57,24 @@ export declare class Allo {
     private mapMimeToContentType;
     /** Get all memories without search (for stats, export, etc.) */
     getAll(): AlloMemory[];
+    /**
+     * Run memory consolidation: decay tiers, remove duplicates,
+     * cluster and summarize related memories, archive old content.
+     *
+     * Summarization requires a Summarizer (any LLM). Without one,
+     * decay + dedup + archive still run.
+     */
+    consolidate(config?: ConsolidateConfig, summarizer?: Summarizer): Promise<ConsolidationReport>;
+    /**
+     * Forget memories semantically matching a query.
+     * Returns the number of memories removed.
+     */
+    forget(query: string, threshold?: number): Promise<number>;
+    /**
+     * Rebuild the internal MemoryTree from TraceLite Memory[].
+     * Maps consolidated memories back to MemoryNode format.
+     */
+    private rebuildTree;
     private ensureInitialized;
     private generateEmbedding;
 }
