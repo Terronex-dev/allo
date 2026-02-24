@@ -404,6 +404,7 @@ export class Allo {
         config?: ConsolidateConfig,
         summarizer?: Summarizer,
     ): Promise<ConsolidationReport> {
+        if (this.config.readOnly) throw new Error('This brain is read-only. Cannot consolidate.');
         await this.ensureInitialized();
         const nodes = this.tree.getAll();
         if (nodes.length === 0) {
