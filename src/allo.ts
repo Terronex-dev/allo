@@ -37,6 +37,15 @@ export interface AlloMemory {
     tags: string[];
     score?: number;
     tier: 'hot' | 'warm' | 'cold' | 'archive';
+    accessed: number;
+    lastAccessed: number;
+    modified: number;
+    parentId: string | null;
+    depth: number;
+    importance: number;
+    confidence: number;
+    source: string;
+    wordCount: number;
 }
 
 const HNSW_DIMS = 384;
@@ -357,6 +366,9 @@ export class Allo {
             content = `[${node.content.type.toUpperCase()}] ${caption}`;
         }
 
+        const accessCount = (node.metadata.custom as any)?.accessCount || 0;
+        const words = content.split(/\s+/).filter(Boolean).length;
+
         return {
             id: node.id,
             type: node.content.type,
@@ -365,6 +377,15 @@ export class Allo {
             tags: node.metadata.tags || [],
             score,
             tier: node.temporal.decayTier,
+            accessed: accessCount,
+            lastAccessed: node.temporal.accessed,
+            modified: node.temporal.modified,
+            parentId: node.parentId,
+            depth: node.depth,
+            importance: node.quality.score,
+            confidence: node.quality.confidence,
+            source: node.quality.source,
+            wordCount: words,
         };
     }
 

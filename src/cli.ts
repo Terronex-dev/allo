@@ -253,6 +253,73 @@ function formatDate(ts: number): string {
     return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
+function formatFullDate(ts: number): string {
+    return new Date(ts).toLocaleString('en-US', {
+        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', hour12: true,
+    });
+}
+
+function decayEstimate(tier: string, importance: number, accessed: number): string {
+    const thresholds: Record<string, number> = { hot: 7, warm: 30, cold: 365 };
+    const base = thresholds[tier];
+    if (!base) return 'permanent';
+    const importMult = 1 + (importance * 2);
+    const accessBoost = Math.min(accessed * 0.5, 5);
+    const effective = Math.round((base + accessBoost) * importMult);
+    return `~${effective} days`;
+}
+
+function wordWrap(text: string, width: number, indent: string): string {
+    const lines: string[] = [];
+    for (const rawLine of text.split('\n')) {
+        if (rawLine.length <= width) {
+            lines.push(indent + rawLine);
+            continue;
+        }
+        let remaining = rawLine;
+        while (remaining.length > width) {
+            let breakAt = remaining.lastIndexOf(' ', width);
+            if (breakAt <= 0) breakAt = width;
+            lines.push(indent + remaining.slice(0, breakAt));
+            remaining = remaining.slice(breakAt).trimStart();
+        }
+        if (remaining) lines.push(indent + remaining);
+    }
+    return lines.join('\n');
+}
+
+import type { AlloMemory } from './allo.js';
+
+function printMemoryDetail(idx: number, mem: AlloMemory): void {
+    const tier = tierLabel[mem.tier] || mem.tier;
+    const score = mem.score !== undefined ? `${(mem.score * 100).toFixed(0)}%` : '-';
+    const sep = theme.dim('  ' + '─'.repeat(62));
+
+    console.log('');
+    console.log(sep);
+    console.log(theme.primaryBold(`  Memory #${idx + 1}`) + theme.dim(` — ${mem.id}`));
+    console.log(sep);
+    console.log(`  ${theme.white('Relevance:')}   ${theme.accent(score)}`);
+    console.log(`  ${theme.white('Tier:')}        [${tier}] ${theme.dim('(decay in ' + decayEstimate(mem.tier, mem.importance, mem.accessed) + ')')}`);
+    console.log(`  ${theme.white('Type:')}        ${theme.dim(mem.type)}`);
+    console.log(`  ${theme.white('Created:')}     ${theme.dim(formatFullDate(mem.timestamp))}`);
+    console.log(`  ${theme.white('Modified:')}    ${theme.dim(formatFullDate(mem.modified))}`);
+    console.log(`  ${theme.white('Accessed:')}    ${theme.dim(String(mem.accessed) + ' times')}${mem.lastAccessed ? theme.dim(', last ' + formatFullDate(mem.lastAccessed)) : ''}`);
+    console.log(`  ${theme.white('Importance:')}  ${theme.dim(mem.importance.toFixed(2))}  ${theme.white('Confidence:')} ${theme.dim(mem.confidence.toFixed(2))}  ${theme.white('Source:')} ${theme.dim(mem.source)}`);
+    if (mem.parentId) {
+        console.log(`  ${theme.white('Parent:')}      ${theme.dim(mem.parentId)} ${theme.dim('(depth ' + mem.depth + ')')}`);
+    }
+    if (mem.tags.length > 0) {
+        console.log(`  ${theme.white('Tags:')}        ${theme.dim(mem.tags.join(', '))}`);
+    }
+    console.log(`  ${theme.white('Words:')}       ${theme.dim(String(mem.wordCount))}`);
+    console.log(sep);
+    console.log(theme.white(wordWrap(mem.content, 72, '  ')));
+    console.log(sep);
+    console.log('');
+}
+
 async function doRecall(a: Allo): Promise<void> {
     const { query } = await inquirer.prompt([{
         type: 'input',
@@ -294,17 +361,7 @@ async function doRecall(a: Allo): Promise<void> {
 
         const idx = parseInt(selection) - 1;
         if (idx >= 0 && idx < results.length) {
-            const mem = results[idx];
-            const tier = tierLabel[mem.tier] || mem.tier;
-            const score = mem.score !== undefined ? ` ${(mem.score * 100).toFixed(0)}%` : '';
-            console.log('');
-            console.log(theme.primaryBold(`  Memory #${idx + 1}`) + theme.dim(` — [${tier}]${score}`));
-            console.log(theme.dim(`  ID: ${mem.id}`));
-            console.log(theme.dim(`  Date: ${new Date(mem.timestamp).toLocaleString()}`));
-            if (mem.tags.length > 0) console.log(theme.dim(`  Tags: ${mem.tags.join(', ')}`));
-            console.log(separator(60));
-            console.log(theme.white(`  ${mem.content}`));
-            console.log(separator(60));
+            printMemoryDetail(idx, results[idx]);
         } else {
             console.log(theme.dim('  Invalid selection.'));
         }
@@ -614,17 +671,7 @@ program
 
             const idx = parseInt(selection) - 1;
             if (idx >= 0 && idx < memories.length) {
-                const mem = memories[idx];
-                const tier = tierLabel[mem.tier] || mem.tier;
-                const score = mem.score !== undefined ? ` ${(mem.score * 100).toFixed(0)}%` : '';
-                console.log('');
-                console.log(theme.primaryBold(`Memory #${idx + 1}`) + theme.dim(` — [${tier}]${score}`));
-                console.log(theme.dim(`ID: ${mem.id}`));
-                console.log(theme.dim(`Date: ${new Date(mem.timestamp).toLocaleString()}`));
-                if (mem.tags.length > 0) console.log(theme.dim(`Tags: ${mem.tags.join(', ')}`));
-                console.log(separator(60));
-                console.log(theme.white(mem.content));
-                console.log(separator(60));
+                printMemoryDetail(idx, memories[idx]);
             } else {
                 console.log(theme.dim('Invalid selection.'));
             }
