@@ -17,6 +17,8 @@ export interface AlloConfig {
     embeddingModel?: string;
     maxEmbeddedFileSize?: number;
     externalStoragePath?: string;
+    persona?: string;
+    readOnly?: boolean;
 }
 
 export interface AlloMemory {
@@ -44,6 +46,8 @@ export class Allo {
             embeddingModel: config.embeddingModel || 'Xenova/all-MiniLM-L6-v2',
             maxEmbeddedFileSize: config.maxEmbeddedFileSize || 25,
             externalStoragePath: config.externalStoragePath || path.join(process.cwd(), 'allo_files'),
+            persona: config.persona || '',
+            readOnly: config.readOnly || false,
             ...config,
         };
         this.tree = this.createTree();
@@ -102,6 +106,11 @@ export class Allo {
                 }
             }
             this.tree = this.createTree(engramFile.nodes);
+            // Auto-detect persona from file metadata
+            const meta = engramFile.header?.metadata as any;
+            if (meta?.persona && !this.config.persona) {
+                this.config.persona = meta.persona;
+            }
         } catch (error: any) {
             if (error.code !== 'ENOENT') {
                 console.error('Memory load error:', error.message);
@@ -110,6 +119,10 @@ export class Allo {
     }
 
     async save(): Promise<{ nodeCount: number; fileSizeMB: number }> {
+        if (this.config.readOnly) {
+            // Read-only brains don't save — just return current stats
+            return this.getStats();
+        }
         // Convert Float32Array embeddings to number[] for msgpackr serialization.
         // msgpackr corrupts Float32Array data during encode/decode.
         const nodes = this.tree.getAll().map(node => {
@@ -135,7 +148,10 @@ export class Allo {
                 },
                 metadata: {
                     source: '@terronex/allo v1.0.0',
-                    description: 'Personal AI memory powered by Engram',
+                    description: this.config.persona
+                        ? `${this.config.persona} — Neural Memory Brain`
+                        : 'Personal AI memory powered by Engram',
+                    ...(this.config.persona ? { persona: this.config.persona } : {}),
                 },
                 schema: {
                     embeddingModel: this.config.embeddingModel,
@@ -170,7 +186,17 @@ export class Allo {
         };
     }
 
+    /** Read-only stats — does NOT save/overwrite the file */
+    getStats(): { nodeCount: number; fileSizeMB: number } {
+        const nodes = this.tree ? this.getAll() : [];
+        return {
+            nodeCount: nodes.length,
+            fileSizeMB: 0, // Unknown without disk stat; use save() for accurate size
+        };
+    }
+
     async addText(text: string, parentId?: string, tags: string[] = []): Promise<string> {
+        if (this.config.readOnly) throw new Error('This brain is read-only. Cannot add memories.');
         await this.ensureInitialized();
         const embedding = await this.generateEmbedding(text);
         // createNode only accepts { type?, parentId?, tags?, metadata? }
@@ -181,6 +207,7 @@ export class Allo {
     }
 
     async addFile(filePath: string, caption: string, parentId?: string, tags: string[] = []): Promise<string> {
+        if (this.config.readOnly) throw new Error('This brain is read-only. Cannot add memories.');
         await this.ensureInitialized();
         const stats = await fs.stat(filePath);
         const fileSizeMB = stats.size / (1024 * 1024);
@@ -230,21 +257,29 @@ export class Allo {
         return node.id;
     }
 
-    async recall(query: string, limit = 8): Promise<AlloMemory[]> {
+    async recall(query: string, limit = 8, minScore = 0.15): Promise<AlloMemory[]> {
         await this.ensureInitialized();
         const size = this.tree.size();
         if (size === 0) return [];
 
         const queryEmbedding = await this.generateEmbedding(query);
         const effectiveLimit = Math.min(limit, size);
-        const options: SearchOptions = {
-            query,
-            topK: effectiveLimit,
-            minScore: 0.3,
-            timeDecay: 0.2,
-        };
 
-        const results: SearchResult[] = searchNodes(this.tree, queryEmbedding, options);
+        let results: SearchResult[];
+
+        // For small datasets (<100 nodes), HNSW graph connectivity is poor.
+        // Use brute-force cosine similarity instead for reliable results.
+        if (size < 100) {
+            results = this.bruteForceSearch(queryEmbedding, effectiveLimit, minScore);
+        } else {
+            const options: SearchOptions = {
+                query,
+                topK: effectiveLimit,
+                minScore,
+                timeDecay: 0.2,
+            };
+            results = searchNodes(this.tree, queryEmbedding, options);
+        }
 
         // Touch accessed nodes (touchNode returns a new object)
         for (const result of results) {
@@ -253,6 +288,36 @@ export class Allo {
         }
 
         return results.map(r => this.toAlloMemory(r.node, r.score));
+    }
+
+    /** Brute-force cosine similarity search — reliable for small datasets */
+    private bruteForceSearch(queryEmb: Float32Array, limit: number, minScore: number): SearchResult[] {
+        const nodes = this.tree.getAll();
+        const scored: SearchResult[] = [];
+
+        for (const node of nodes) {
+            if (!node.embedding) continue;
+            const emb = node.embedding instanceof Float32Array
+                ? node.embedding
+                : new Float32Array(node.embedding as any);
+            const score = this.cosineSimilarity(queryEmb, emb);
+            if (score >= minScore) {
+                scored.push({ node, score });
+            }
+        }
+
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, limit);
+    }
+
+    private cosineSimilarity(a: Float32Array, b: Float32Array): number {
+        let dot = 0, normA = 0, normB = 0;
+        for (let i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
     // === Internal helpers ===

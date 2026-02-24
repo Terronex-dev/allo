@@ -1,0 +1,25 @@
+{{header 
+| title = Experiments with Alternate Currents of High Potential and High Frequency
+| author =  Nikola Tesla
+| section = 
+| previous = 
+| next = 
+| year = 1892
+ | notes    =   
+}}
+
+{{default layout|Layout 2}}
+<pages index="Experiments with alternate currents of high potential and high frequency (Tesla).djvu" include=9 />
+{{ppb}}
+<pages index="Experiments with alternate currents of high potential and high frequency (Tesla).djvu" include=7 />
+{{ppb}}
+{{AuxTOC|
+*[[Experiments with Alternate Currents of High Potential and High Frequency/Biographical Sketch of Nikola Tesla.|Biographical Sketch of Nikola Tesla]]
+*[[Experiments with Alternate Currents of High Potential and High Frequency/Lecture|Lecture]]
+}}
+{{advertisements|<pages index="Experiments with alternate currents of high potential and high frequency (Tesla).djvu" from=165 to=168 />}}
+{{rule}}
+{{smallrefs}}
+
+{{PD-US-expired}}
+[[Category:Lectures]]

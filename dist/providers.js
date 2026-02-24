@@ -321,13 +321,32 @@ async function validateKey(provider, key, baseUrl) {
     try {
         switch (provider) {
             case 'anthropic': {
-                const llm = new AnthropicLLM(key);
-                await llm.chat({
-                    model: 'claude-haiku-3-5-20241022',
-                    messages: [{ role: 'user', content: 'Say hi' }],
-                    maxTokens: 5,
+                // Use a lightweight models list request instead of a chat call.
+                // OAuth tokens need Bearer auth + beta header.
+                const isOAuth = key.includes('sk-ant-oat');
+                const headers = {
+                    'anthropic-version': '2023-06-01',
+                };
+                if (isOAuth) {
+                    headers['Authorization'] = `Bearer ${key}`;
+                    headers['anthropic-beta'] = 'oauth-2025-04-20';
+                }
+                else {
+                    headers['x-api-key'] = key;
+                }
+                // POST a minimal message — models endpoint may not exist for all auth types
+                const res = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-haiku-3-5-20241022',
+                        max_tokens: 1,
+                        messages: [{ role: 'user', content: 'hi' }],
+                    }),
                 });
-                return true;
+                // 200 = works, 400 = auth works but bad request (still valid key)
+                // 401/403 = bad key
+                return res.status !== 401 && res.status !== 403;
             }
             case 'openai': {
                 const res = await fetch('https://api.openai.com/v1/models', {

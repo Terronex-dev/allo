@@ -13,6 +13,7 @@ export {
     loadConfig, saveConfig, createLLM, validateKey,
 } from './providers';
 export { theme, HEADER, banner } from './theme';
+export { discoverBrains, ensureBrainsDir, BrainInfo, getBrainsDir } from './brains';
 
 // Re-export key types from engram
 export { MemoryNode, EngramFile } from '@terronex/engram';

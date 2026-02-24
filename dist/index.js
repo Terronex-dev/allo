@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VERSION = exports.banner = exports.HEADER = exports.theme = exports.validateKey = exports.createLLM = exports.saveConfig = exports.loadConfig = exports.OllamaEmbeddings = exports.GeminiLLM = exports.OllamaLLM = exports.OpenAILLM = exports.AnthropicLLM = exports.Allo = void 0;
+exports.VERSION = exports.getBrainsDir = exports.ensureBrainsDir = exports.discoverBrains = exports.banner = exports.HEADER = exports.theme = exports.validateKey = exports.createLLM = exports.saveConfig = exports.loadConfig = exports.OllamaEmbeddings = exports.GeminiLLM = exports.OllamaLLM = exports.OpenAILLM = exports.AnthropicLLM = exports.Allo = void 0;
 var allo_1 = require("./allo");
 Object.defineProperty(exports, "Allo", { enumerable: true, get: function () { return allo_1.Allo; } });
 var providers_1 = require("./providers");
@@ -24,5 +24,9 @@ var theme_1 = require("./theme");
 Object.defineProperty(exports, "theme", { enumerable: true, get: function () { return theme_1.theme; } });
 Object.defineProperty(exports, "HEADER", { enumerable: true, get: function () { return theme_1.HEADER; } });
 Object.defineProperty(exports, "banner", { enumerable: true, get: function () { return theme_1.banner; } });
+var brains_1 = require("./brains");
+Object.defineProperty(exports, "discoverBrains", { enumerable: true, get: function () { return brains_1.discoverBrains; } });
+Object.defineProperty(exports, "ensureBrainsDir", { enumerable: true, get: function () { return brains_1.ensureBrainsDir; } });
+Object.defineProperty(exports, "getBrainsDir", { enumerable: true, get: function () { return brains_1.getBrainsDir; } });
 exports.VERSION = '1.0.0';
 //# sourceMappingURL=index.js.map

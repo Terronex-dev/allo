@@ -8,5 +8,6 @@
 export { Allo, AlloConfig, AlloMemory } from './allo';
 export { ProviderConfig, LLMProvider, EmbeddingProvider, ChatMessage, ChatResponse, AnthropicLLM, OpenAILLM, OllamaLLM, GeminiLLM, OllamaEmbeddings, loadConfig, saveConfig, createLLM, validateKey, } from './providers';
 export { theme, HEADER, banner } from './theme';
+export { discoverBrains, ensureBrainsDir, BrainInfo, getBrainsDir } from './brains';
 export { MemoryNode, EngramFile } from '@terronex/engram';
 export declare const VERSION = "1.0.0";

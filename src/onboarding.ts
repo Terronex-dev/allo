@@ -69,14 +69,50 @@ export async function runOnboarding(): Promise<ProviderConfig> {
         if (available) {
             const ollama = new OllamaLLM();
             const models = await ollama.listModels();
-            const hasNomic = models.some(m => m.includes('nomic-embed'));
             spinner.succeed(theme.success(`Ollama found! ${models.length} models available`));
-            if (hasNomic) {
-                config.embeddings = { provider: 'ollama', model: 'nomic-embed-text' };
-                console.log(theme.dim('  Using nomic-embed-text for embeddings'));
-            } else {
-                console.log(theme.primary('  nomic-embed-text not found. Run: ollama pull nomic-embed-text'));
-                config.embeddings = { provider: 'ollama', model: 'nomic-embed-text' };
+
+            // Known embedding models with descriptions
+            const embeddingModels = [
+                { name: 'nomic-embed-text', dims: 768, desc: 'Great all-rounder' },
+                { name: 'all-minilm', dims: 384, desc: 'Fast and lightweight (MiniLM)' },
+                { name: 'mxbai-embed-large', dims: 1024, desc: 'Highest quality' },
+                { name: 'bge-small-en-v1.5', dims: 384, desc: 'BGE — good for short text' },
+                { name: 'bge-large-en-v1.5', dims: 1024, desc: 'BGE — best accuracy' },
+                { name: 'snowflake-arctic-embed', dims: 1024, desc: 'Strong retrieval model' },
+            ];
+
+            // Check which are already installed
+            const installed = embeddingModels.filter(em =>
+                models.some(m => m.includes(em.name.split('-')[0]))
+            );
+            const notInstalled = embeddingModels.filter(em =>
+                !models.some(m => m.includes(em.name.split('-')[0]))
+            );
+
+            const choices = [
+                ...installed.map(em => ({
+                    name: `${theme.success('●')} ${em.name} (${em.dims}d) — ${em.desc} ${theme.dim('[installed]')}`,
+                    value: em.name,
+                })),
+                ...notInstalled.map(em => ({
+                    name: `${theme.dim('○')} ${em.name} (${em.dims}d) — ${em.desc} ${theme.dim('[will pull]')}`,
+                    value: em.name,
+                })),
+            ];
+
+            const { embedModel } = await inquirer.prompt([{
+                type: 'list',
+                name: 'embedModel',
+                message: theme.white('Which embedding model?'),
+                choices,
+            }]);
+
+            config.embeddings = { provider: 'ollama', model: embedModel };
+
+            // Check if model needs to be pulled
+            const isInstalled = models.some(m => m.includes(embedModel.split('-')[0]));
+            if (!isInstalled) {
+                console.log(theme.primary(`\n  Model not installed. Run: ollama pull ${embedModel}`));
             }
         } else {
             spinner.warn(theme.error('Ollama not running. Falling back to local embeddings.'));
@@ -182,7 +218,17 @@ async function setupAnthropic(config: ProviderConfig): Promise<void> {
                 config.keys.anthropic = token;
                 config.llm = { provider: 'anthropic', model: 'claude-sonnet-4-20250514' };
             } else {
-                spinner.fail(theme.error('OAuth token validation failed. Check the token and try again.'));
+                spinner.warn(theme.error('OAuth token validation failed.'));
+                const { saveAnyway } = await inquirer.prompt([{
+                    type: 'confirm',
+                    name: 'saveAnyway',
+                    message: theme.white('Save the token anyway? (you can fix it later with allo setup)'),
+                    default: true,
+                }]);
+                if (saveAnyway) {
+                    config.keys.anthropic = token;
+                    config.llm = { provider: 'anthropic', model: 'claude-sonnet-4-20250514' };
+                }
             }
         }
     } else if (authMethod === 'apikey') {
@@ -201,7 +247,17 @@ async function setupAnthropic(config: ProviderConfig): Promise<void> {
                 config.keys.anthropic = key;
                 config.llm = { provider: 'anthropic', model: 'claude-sonnet-4-20250514' };
             } else {
-                spinner.fail(theme.error('API key validation failed.'));
+                spinner.warn(theme.error('API key validation failed.'));
+                const { saveAnyway } = await inquirer.prompt([{
+                    type: 'confirm',
+                    name: 'saveAnyway',
+                    message: theme.white('Save the key anyway?'),
+                    default: true,
+                }]);
+                if (saveAnyway) {
+                    config.keys.anthropic = key;
+                    config.llm = { provider: 'anthropic', model: 'claude-sonnet-4-20250514' };
+                }
             }
         }
     } else {

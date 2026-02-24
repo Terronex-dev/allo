@@ -16,9 +16,11 @@ const allo_1 = require("./allo");
 const theme_1 = require("./theme");
 const providers_1 = require("./providers");
 const onboarding_1 = require("./onboarding");
+const brains_1 = require("./brains");
 const VERSION = '1.0.0';
 let allo;
 let config;
+let activeBrainPath;
 async function ensureSetup() {
     if (!config) {
         if (!(0, providers_1.configExists)()) {
@@ -31,14 +33,25 @@ async function ensureSetup() {
     return config;
 }
 async function getAllo(options) {
+    const requestedFile = options?.file;
+    // If switching brains (different file), reset the instance
+    if (allo && requestedFile && requestedFile !== activeBrainPath) {
+        allo = null;
+    }
     if (!allo) {
         const cfg = await ensureSetup();
-        const memFile = options?.file || cfg.memoryFile || 'allo-memory.engram';
+        const memFile = requestedFile || cfg.memoryFile || 'allo-memory.engram';
         const password = cfg.password || '';
         const spinner = (0, ora_1.default)(theme_1.theme.muted('Waking up Allo...')).start();
         try {
-            allo = new allo_1.Allo({ memoryFile: memFile, password });
+            allo = new allo_1.Allo({
+                memoryFile: memFile,
+                password,
+                persona: options?.persona,
+                readOnly: options?.readOnly,
+            });
             await allo.initialize();
+            activeBrainPath = memFile;
             spinner.succeed(theme_1.theme.success('Allo is ready!'));
         }
         catch (e) {
@@ -51,24 +64,30 @@ async function getAllo(options) {
 // ============== Interactive Menu ==============
 async function interactiveMenu() {
     const cfg = await ensureSetup();
-    const a = await getAllo();
-    const { nodeCount, fileSizeMB } = await a.save();
+    let a = await getAllo();
+    let { nodeCount } = a.getStats();
     console.clear();
-    console.log((0, theme_1.banner)(VERSION, nodeCount, fileSizeMB));
+    console.log((0, theme_1.banner)(VERSION, nodeCount, 0));
+    const isReadOnly = a.config.readOnly;
+    const personaName = a.config.persona;
     while (true) {
+        const brainLabel = personaName
+            ? theme_1.theme.accent(`  [${personaName}]`)
+            : '';
+        const choices = [];
+        if (!isReadOnly) {
+            choices.push({ name: theme_1.theme.success('❯ Remember something'), value: 'remember' });
+        }
+        choices.push({ name: theme_1.theme.accent('  Recall a memory'), value: 'recall' });
+        if (cfg.llm) {
+            choices.push({ name: theme_1.theme.primary('  Chat' + (personaName ? ` with ${personaName}` : ' with your memories')), value: 'chat' });
+        }
+        choices.push({ name: theme_1.theme.white('  Switch brain'), value: 'switch' }, { name: theme_1.theme.white('  Browse memory tree'), value: 'browse' }, { name: theme_1.theme.muted('  Stats & health'), value: 'stats' }, { name: theme_1.theme.muted('  Settings'), value: 'settings' }, { name: theme_1.theme.dim('  Exit'), value: 'exit' });
         const { action } = await inquirer_1.default.prompt([{
                 type: 'list',
                 name: 'action',
-                message: theme_1.theme.primaryBold('What would you like to do?'),
-                choices: [
-                    { name: theme_1.theme.success('❯ Remember something'), value: 'remember' },
-                    { name: theme_1.theme.accent('  Recall a memory'), value: 'recall' },
-                    ...(cfg.llm ? [{ name: theme_1.theme.primary('  Chat with your memories'), value: 'chat' }] : []),
-                    { name: theme_1.theme.white('  Browse memory tree'), value: 'browse' },
-                    { name: theme_1.theme.muted('  Stats & health'), value: 'stats' },
-                    { name: theme_1.theme.muted('  Settings'), value: 'settings' },
-                    { name: theme_1.theme.dim('  Exit'), value: 'exit' },
-                ],
+                message: theme_1.theme.primaryBold('What would you like to do?') + brainLabel,
+                choices,
             }]);
         switch (action) {
             case 'remember':
@@ -78,8 +97,18 @@ async function interactiveMenu() {
                 await doRecall(a);
                 break;
             case 'chat':
-                await doChat(a);
+                await doChat(a, personaName);
                 break;
+            case 'switch': {
+                const result = await doBrainSwitch(cfg);
+                if (result) {
+                    a = result;
+                    const stats = a.getStats();
+                    console.clear();
+                    console.log((0, theme_1.banner)(VERSION, stats.nodeCount, 0));
+                }
+                break;
+            }
             case 'stats':
                 await doStats(a);
                 break;
@@ -94,6 +123,65 @@ async function interactiveMenu() {
                 process.exit(0);
         }
     }
+}
+async function doBrainSwitch(cfg) {
+    (0, brains_1.ensureBrainsDir)();
+    const brains = (0, brains_1.discoverBrains)(cfg.memoryFile);
+    const choices = brains.map(b => {
+        const label = b.persona ? `${b.name} [${b.persona}]` : b.name;
+        const meta = `${b.sizeMB} MB`;
+        const active = b.path === activeBrainPath ? theme_1.theme.success(' (active)') : '';
+        return {
+            name: `${theme_1.theme.white(label)} ${theme_1.theme.dim(meta)}${active}`,
+            value: b.path,
+        };
+    });
+    choices.push({ name: theme_1.theme.accent('+ Load a .engram file by path'), value: '__custom__' }, { name: theme_1.theme.dim('  Cancel'), value: '__cancel__' });
+    const { brainPath } = await inquirer_1.default.prompt([{
+            type: 'list',
+            name: 'brainPath',
+            message: theme_1.theme.primaryBold('Switch brain:'),
+            choices,
+        }]);
+    if (brainPath === '__cancel__')
+        return null;
+    let filePath = brainPath;
+    if (brainPath === '__custom__') {
+        const { customPath } = await inquirer_1.default.prompt([{
+                type: 'input',
+                name: 'customPath',
+                message: theme_1.theme.white('Path to .engram file:'),
+            }]);
+        if (!customPath)
+            return null;
+        filePath = customPath;
+    }
+    // Ask if this is a persona brain
+    const brain = brains.find(b => b.path === filePath);
+    let persona;
+    let readOnly = false;
+    const { brainType } = await inquirer_1.default.prompt([{
+            type: 'list',
+            name: 'brainType',
+            message: theme_1.theme.white('Brain type:'),
+            choices: [
+                { name: theme_1.theme.success('Personal memory') + theme_1.theme.dim(' — read/write, your memories'), value: 'personal' },
+                { name: theme_1.theme.accent('Persona brain') + theme_1.theme.dim(' — read-only, chat as someone'), value: 'persona' },
+            ],
+        }]);
+    if (brainType === 'persona') {
+        readOnly = true;
+        const { personaName } = await inquirer_1.default.prompt([{
+                type: 'input',
+                name: 'personaName',
+                message: theme_1.theme.white('Who is this brain? (e.g., "Nikola Tesla"):'),
+                default: brain?.persona || '',
+            }]);
+        persona = personaName || undefined;
+    }
+    // Switch
+    allo = null;
+    return getAllo({ file: filePath, persona, readOnly });
 }
 async function doRemember(a) {
     const { text } = await inquirer_1.default.prompt([{
@@ -142,13 +230,26 @@ async function doRecall(a) {
     });
     console.log('');
 }
-async function doChat(a) {
+async function doChat(a, persona) {
     const llm = (0, providers_1.createLLM)(config);
     if (!llm) {
         console.log(theme_1.theme.error('\n  No LLM configured. Run allo setup to add one.\n'));
         return;
     }
-    console.log(theme_1.theme.accent('\n  Chat mode — your memories are the context.'));
+    const chatHistory = [];
+    let systemPrompt;
+    let chatLabel;
+    if (persona) {
+        systemPrompt = `You ARE ${persona}. You are speaking as ${persona} in first person. Your knowledge comes from your own published works, patents, lectures, and autobiography — the excerpts provided below are YOUR writings and experiences. Speak naturally as yourself, with your personality, opinions, and voice. Reference your actual inventions, experiences, and ideas. If asked something outside your knowledge, say so honestly. Do not break character.\n\nYour writings and knowledge:\n`;
+        chatLabel = persona.split(' ').pop() || persona;
+        console.log(theme_1.theme.accent(`\n  You are now speaking with ${persona}.`));
+        console.log(theme_1.theme.dim('  Their published works are the knowledge base.'));
+    }
+    else {
+        systemPrompt = `You are Allo, a neural memory assistant. Answer based on the user's memories below. Be concise and helpful.\n\nRelevant memories:\n`;
+        chatLabel = 'Allo';
+        console.log(theme_1.theme.accent('\n  Chat mode — your memories are the context.'));
+    }
     console.log(theme_1.theme.dim('  Type "exit" to leave.\n'));
     while (true) {
         const { input } = await inquirer_1.default.prompt([{
@@ -160,22 +261,25 @@ async function doChat(a) {
             break;
         // Recall relevant memories
         const spinner = (0, ora_1.default)(theme_1.theme.muted('Thinking...')).start();
-        const memories = await a.recall(input, 5);
+        const memories = await a.recall(input, 8);
         const context = memories.length > 0
             ? memories.map(m => `[${m.tier}] ${m.content}`).join('\n')
             : 'No relevant memories found.';
+        chatHistory.push({ role: 'user', content: input });
         try {
             const response = await llm.chat({
                 model: config.llm.model,
-                system: `You are Allo, a neural memory assistant. Answer based on the user's memories below. Be concise and helpful.\n\nRelevant memories:\n${context}`,
-                messages: [{ role: 'user', content: input }],
+                system: systemPrompt + context,
+                messages: chatHistory.slice(-10), // Keep last 10 messages for context
             });
             spinner.stop();
-            console.log(theme_1.theme.accent('\n  Allo: ') + response.content);
+            chatHistory.push({ role: 'assistant', content: response.content });
+            console.log(theme_1.theme.accent(`\n  ${chatLabel}: `) + response.content);
             console.log(theme_1.theme.dim(`  (${response.tokensIn + response.tokensOut} tokens)\n`));
         }
         catch (e) {
             spinner.fail(theme_1.theme.error(`LLM error: ${e.message}`));
+            chatHistory.pop(); // Remove the failed user message
         }
     }
 }
@@ -194,6 +298,12 @@ async function doStats(a) {
     console.log(`  ${theme_1.theme.white('Memories:')}  ${theme_1.theme.primaryBold(String(nodeCount))}`);
     console.log(`  ${theme_1.theme.white('Size:')}      ${theme_1.theme.dim(fileSizeMB + ' MB')}`);
     console.log(`  ${theme_1.theme.white('Model:')}     ${theme_1.theme.dim(a.config.embeddingModel)}`);
+    if (a.config.persona) {
+        console.log(`  ${theme_1.theme.white('Persona:')}   ${theme_1.theme.accent(a.config.persona)}`);
+    }
+    if (a.config.readOnly) {
+        console.log(`  ${theme_1.theme.white('Mode:')}      ${theme_1.theme.dim('Read-only')}`);
+    }
     if (config?.llm) {
         console.log(`  ${theme_1.theme.white('LLM:')}       ${theme_1.theme.dim(config.llm.provider + '/' + config.llm.model)}`);
     }
@@ -321,9 +431,10 @@ program
     .command('chat')
     .description('Chat with your memories using AI')
     .option('-f, --file <path>', 'Memory file path')
+    .option('--persona <name>', 'Embody a persona (e.g., "Nikola Tesla")')
     .action(async (options) => {
     await getAllo(options);
-    await doChat(allo);
+    await doChat(allo, options.persona);
 });
 program
     .command('stats')

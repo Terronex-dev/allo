@@ -4,6 +4,8 @@ export interface AlloConfig {
     embeddingModel?: string;
     maxEmbeddedFileSize?: number;
     externalStoragePath?: string;
+    persona?: string;
+    readOnly?: boolean;
 }
 export interface AlloMemory {
     id: string;
@@ -27,9 +29,17 @@ export declare class Allo {
         nodeCount: number;
         fileSizeMB: number;
     }>;
+    /** Read-only stats — does NOT save/overwrite the file */
+    getStats(): {
+        nodeCount: number;
+        fileSizeMB: number;
+    };
     addText(text: string, parentId?: string, tags?: string[]): Promise<string>;
     addFile(filePath: string, caption: string, parentId?: string, tags?: string[]): Promise<string>;
-    recall(query: string, limit?: number): Promise<AlloMemory[]>;
+    recall(query: string, limit?: number, minScore?: number): Promise<AlloMemory[]>;
+    /** Brute-force cosine similarity search — reliable for small datasets */
+    private bruteForceSearch;
+    private cosineSimilarity;
     /**
      * Insert a node into the tree, optionally linking it to a parent.
      * We always use tree.add() because tree.addChild() internally re-invokes

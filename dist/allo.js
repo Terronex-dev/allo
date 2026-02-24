@@ -24,6 +24,8 @@ class Allo {
             embeddingModel: config.embeddingModel || 'Xenova/all-MiniLM-L6-v2',
             maxEmbeddedFileSize: config.maxEmbeddedFileSize || 25,
             externalStoragePath: config.externalStoragePath || node_path_1.default.join(process.cwd(), 'allo_files'),
+            persona: config.persona || '',
+            readOnly: config.readOnly || false,
             ...config,
         };
         this.tree = this.createTree();
@@ -83,6 +85,11 @@ class Allo {
                 }
             }
             this.tree = this.createTree(engramFile.nodes);
+            // Auto-detect persona from file metadata
+            const meta = engramFile.header?.metadata;
+            if (meta?.persona && !this.config.persona) {
+                this.config.persona = meta.persona;
+            }
         }
         catch (error) {
             if (error.code !== 'ENOENT') {
@@ -91,6 +98,10 @@ class Allo {
         }
     }
     async save() {
+        if (this.config.readOnly) {
+            // Read-only brains don't save — just return current stats
+            return this.getStats();
+        }
         // Convert Float32Array embeddings to number[] for msgpackr serialization.
         // msgpackr corrupts Float32Array data during encode/decode.
         const nodes = this.tree.getAll().map(node => {
@@ -115,7 +126,10 @@ class Allo {
                 },
                 metadata: {
                     source: '@terronex/allo v1.0.0',
-                    description: 'Personal AI memory powered by Engram',
+                    description: this.config.persona
+                        ? `${this.config.persona} — Neural Memory Brain`
+                        : 'Personal AI memory powered by Engram',
+                    ...(this.config.persona ? { persona: this.config.persona } : {}),
                 },
                 schema: {
                     embeddingModel: this.config.embeddingModel,
@@ -147,7 +161,17 @@ class Allo {
             fileSizeMB: parseFloat((stats.size / 1048576).toFixed(2)),
         };
     }
+    /** Read-only stats — does NOT save/overwrite the file */
+    getStats() {
+        const nodes = this.tree ? this.getAll() : [];
+        return {
+            nodeCount: nodes.length,
+            fileSizeMB: 0, // Unknown without disk stat; use save() for accurate size
+        };
+    }
     async addText(text, parentId, tags = []) {
+        if (this.config.readOnly)
+            throw new Error('This brain is read-only. Cannot add memories.');
         await this.ensureInitialized();
         const embedding = await this.generateEmbedding(text);
         // createNode only accepts { type?, parentId?, tags?, metadata? }
@@ -157,6 +181,8 @@ class Allo {
         return node.id;
     }
     async addFile(filePath, caption, parentId, tags = []) {
+        if (this.config.readOnly)
+            throw new Error('This brain is read-only. Cannot add memories.');
         await this.ensureInitialized();
         const stats = await promises_1.default.stat(filePath);
         const fileSizeMB = stats.size / (1024 * 1024);
@@ -201,26 +227,61 @@ class Allo {
         this.insertNode(node, parentId);
         return node.id;
     }
-    async recall(query, limit = 8) {
+    async recall(query, limit = 8, minScore = 0.15) {
         await this.ensureInitialized();
         const size = this.tree.size();
         if (size === 0)
             return [];
         const queryEmbedding = await this.generateEmbedding(query);
         const effectiveLimit = Math.min(limit, size);
-        const options = {
-            query,
-            topK: effectiveLimit,
-            minScore: 0.3,
-            timeDecay: 0.2,
-        };
-        const results = (0, engram_1.searchNodes)(this.tree, queryEmbedding, options);
+        let results;
+        // For small datasets (<100 nodes), HNSW graph connectivity is poor.
+        // Use brute-force cosine similarity instead for reliable results.
+        if (size < 100) {
+            results = this.bruteForceSearch(queryEmbedding, effectiveLimit, minScore);
+        }
+        else {
+            const options = {
+                query,
+                topK: effectiveLimit,
+                minScore,
+                timeDecay: 0.2,
+            };
+            results = (0, engram_1.searchNodes)(this.tree, queryEmbedding, options);
+        }
         // Touch accessed nodes (touchNode returns a new object)
         for (const result of results) {
             const touched = (0, engram_1.touchNode)(result.node);
             this.tree.update(result.node.id, { temporal: touched.temporal });
         }
         return results.map(r => this.toAlloMemory(r.node, r.score));
+    }
+    /** Brute-force cosine similarity search — reliable for small datasets */
+    bruteForceSearch(queryEmb, limit, minScore) {
+        const nodes = this.tree.getAll();
+        const scored = [];
+        for (const node of nodes) {
+            if (!node.embedding)
+                continue;
+            const emb = node.embedding instanceof Float32Array
+                ? node.embedding
+                : new Float32Array(node.embedding);
+            const score = this.cosineSimilarity(queryEmb, emb);
+            if (score >= minScore) {
+                scored.push({ node, score });
+            }
+        }
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, limit);
+    }
+    cosineSimilarity(a, b) {
+        let dot = 0, normA = 0, normB = 0;
+        for (let i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
     // === Internal helpers ===
     /**
