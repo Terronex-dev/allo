@@ -212,10 +212,24 @@ export class Allo {
         };
     }
 
-    async addText(text: string, parentId?: string, tags: string[] = []): Promise<string> {
+    async addText(text: string, parentId?: string, tags: string[] = [], dedupThreshold = 0.92): Promise<string> {
         if (this.config.readOnly) throw new Error('This brain is read-only. Cannot add memories.');
         await this.ensureInitialized();
         const embedding = await this.generateEmbedding(text);
+
+        // Auto-dedup: check if a near-identical memory already exists
+        if (dedupThreshold > 0 && this.tree.size() > 0) {
+            const existing = this.bruteForceSearch(embedding, 1, dedupThreshold);
+            if (existing.length > 0) {
+                // Touch the existing memory instead of creating a duplicate
+                const match = existing[0];
+                this.tree.update(match.node.id, {
+                    temporal: { ...match.node.temporal, accessed: Date.now() },
+                });
+                return match.node.id;
+            }
+        }
+
         // createNode only accepts { type?, parentId?, tags?, metadata? }
         const node = createNode(text, { tags, metadata: { charCount: text.length } });
         node.embedding = embedding;

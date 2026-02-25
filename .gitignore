@@ -4,3 +4,7 @@ models/
 allo_files/
 *.engram
 .DS_Store
+*.tgz
+.env
+tree-check.ts
+test-500.ts

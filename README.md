@@ -1,109 +1,175 @@
-# Allo — Your Neural Memory Assistant
+# Allo
 
-**The different kind of AI memory that grows with you.**
+**Neural memory for humans and AI agents.**
 
 [![npm version](https://img.shields.io/npm/v/@terronex/allo.svg)](https://www.npmjs.com/package/@terronex/allo)
 [![Powered by Engram](https://img.shields.io/badge/Powered%20by-Engram-ef4444)](https://github.com/Terronex-dev/engram)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-22%2F22-2ed573)]()
 
-Allo is a personal memory system for humans and AI agents. It stores everything you tell it in a single `.engram` file, finds relevant memories using semantic search, and gets smarter over time through temporal decay — recent memories are vivid, old ones fade to summaries, just like a real brain.
+Allo stores memories in a single `.engram` file, retrieves them by meaning using semantic search, and curates them over time with temporal decay. Recent memories stay vivid. Old ones fade to summaries. Duplicates merge automatically.
 
-Built on the [Engram](https://github.com/Terronex-dev/engram) neural memory format.
+Built on [@terronex/engram](https://github.com/Terronex-dev/engram) and [@terronex/engram-trace-lite](https://github.com/Terronex-dev/engram-trace-lite).
 
----
+## Install
+
+```bash
+npm install -g @terronex/allo
+```
+
+Requires Node.js 18+. First run walks you through provider setup.
 
 ## Quick Start
 
 ```bash
-npm install -g @terronex/allo
-
-# First run walks you through setup
+# Interactive menu
 allo
 
-# Or jump straight in
-allo remember "The meeting with Sarah went well — she approved the Q3 budget"
-allo recall "budget approval"
-```
-
-## What It Does
-
-**Remember** anything — text, files, images, documents:
-```bash
+# Remember something
 allo remember "HNSW indexing gives us 400x faster search"
-allo remember-file ./research-paper.pdf --caption "Ebbinghaus forgetting curve study"
-```
 
-**Recall** by meaning, not keywords:
-```bash
+# Recall by meaning
 allo recall "fast search algorithms"
-# Returns: "HNSW indexing gives us 400x faster search" (85%)
-```
 
-**Chat** with your memories (requires an LLM provider):
-```bash
+# Chat with your memories (requires LLM provider)
 allo chat
-# You: What do I know about search performance?
-# Allo: Based on your memories, HNSW indexing provides 400x faster search...
+
+# Browse your memory tree
+allo browse
 ```
 
-**Track** your brain's health:
-```bash
-allo stats
+## CLI Reference
+
+| Command | Description |
+|---------|-------------|
+| `allo` | Interactive menu |
+| `allo remember [text]` | Add a text memory |
+| `allo remember-file <path>` | Add a file memory (images, audio, docs) |
+| `allo recall <query>` | Semantic search with interactive detail view |
+| `allo chat` | Chat with your memories using an LLM |
+| `allo browse` | Browse memories by tag, date, tier, or hierarchy |
+| `allo consolidate` | Run memory consolidation (decay, dedup, cluster) |
+| `allo forget <query>` | Semantically forget matching memories |
+| `allo stats` | Brain health report with tier distribution |
+| `allo setup` | Configure LLM providers |
+| `allo demo` | Guided demo |
+
+### Common Options
+
 ```
-```
-Brain Health Report
-──────────────────────────────
-  File:      ~/allo-memory.engram
-  Memories:  847
-  Size:      2.3 MB
-  Model:     Xenova/all-MiniLM-L6-v2
-  LLM:       anthropic/claude-sonnet-4
-
-  HOT     ████████░░░░░░░░░░░░ 124
-  WARM    ██████████████░░░░░░ 283
-  COLD    ████████████████████ 312
-  ARCHIVE ████████░░░░░░░░░░░░ 128
+-f, --file <path>     Use a specific .engram file
+-t, --tags <tags>     Comma-separated tags
+-p, --parent <id>     Parent memory ID (builds hierarchy)
+-l, --limit <n>       Max recall results (default: 8)
+-b, --brief           Compact output without interactive selection
+--persona <name>      Chat as a persona (with --file for brain)
 ```
 
-## How Memory Works
+## Recall
 
-Allo uses Ebbinghaus-inspired temporal decay. Every memory starts **hot** and naturally cools over time:
-
-| Tier | Age | Behavior |
-|------|-----|----------|
-| **HOT** | 0-7 days | Full detail, boosted in search |
-| **WARM** | 7-30 days | Full detail, normal ranking |
-| **COLD** | 30-90 days | Candidates for summarization |
-| **ARCHIVE** | 90+ days | Compressed, still searchable |
-
-Accessing a memory reheats it. Frequently recalled memories stay hot forever.
-
-## AI Providers
-
-Allo works with multiple AI providers for smart recall and chat. Set up during onboarding or anytime with `allo setup`.
-
-| Provider | Auth | Use Case |
-|----------|------|----------|
-| **Local** (default) | None | Embeddings via Xenova/transformers — free, private |
-| **Ollama** | None | Local LLM + embeddings — free, private |
-| **Anthropic** | API key or OAuth | Claude for chat and smart recall |
-| **OpenAI** | API key | GPT-4o for chat and smart recall |
-| **Google** | API key | Gemini for chat and smart recall |
-
-### Anthropic OAuth
-
-Allo supports Anthropic OAuth tokens for keyless authentication:
+Recall uses semantic search -- it matches meaning, not keywords:
 
 ```bash
-# Get an OAuth token
-npx @anthropic-ai/claude-code auth
+$ allo recall "budget approval"
 
-# Paste it during allo setup — tokens starting with sk-ant-oat- are auto-detected
-allo setup
+Found 3 memories:
+
+  1. [HOT] 87%  Meeting with Sarah went well, she approved the Q3 budget    Jun 14
+  2. [WARM] 62% Q3 planning started, budget discussions ongoing              May 28
+  3. [COLD] 41% Annual budget process kicks off in April                     Apr 2
+
+View [1-3], or Enter to go back:
 ```
 
-## Programmatic Usage
+Select a number to see full detail:
+
+```
+  ──────────────────────────────────────────────────────────────
+  Memory #1 -- mlz6n0rl-84raep-00t8
+  ──────────────────────────────────────────────────────────────
+  Relevance:   87%
+  Tier:        [HOT] (decay in ~14 days)
+  Type:        text
+  Created:     Sat, Jun 14, 2026, 2:30 PM
+  Modified:    Sat, Jun 14, 2026, 2:30 PM
+  Accessed:    3 times, last Mon, Jun 16, 2026, 9:15 AM
+  Importance:  0.80  Confidence: 0.80  Source: direct
+  Tags:        work, budget
+  Words:       12
+  ──────────────────────────────────────────────────────────────
+  Meeting with Sarah went well, she approved the Q3 budget
+  ──────────────────────────────────────────────────────────────
+```
+
+## Memory Browser
+
+Browse your memories interactively by tag, date, tier, or parent-child hierarchy:
+
+```bash
+allo browse
+```
+
+- **By tag** -- see all tags with counts, select to explore
+- **By date** -- memories grouped by day
+- **By tier** -- filter hot, warm, cold, or archive
+- **Recent** -- latest 25 memories
+- **Tree view** -- parent-child hierarchy (use `--parent <id>` when remembering to build trees)
+
+Paginated with prev/next navigation. Select any memory to see its full detail card.
+
+## Temporal Decay
+
+Memories age through four tiers based on the Ebbinghaus forgetting curve:
+
+| Tier | Default Age | Behavior |
+|------|-------------|----------|
+| HOT | 0--7 days | Full detail, boosted in search |
+| WARM | 7--30 days | Full detail, normal ranking |
+| COLD | 30--365 days | Candidates for summarization |
+| ARCHIVE | 365+ days | Truncated to 200 chars, still searchable by embedding |
+
+Accessing a memory slows its decay (0.5 days per access, max 5 days). High-importance memories decay up to 3x slower.
+
+### Consolidation
+
+Run `allo consolidate` to curate your brain:
+
+1. **Decay** -- age memories through tiers based on time and access
+2. **Deduplicate** -- remove near-identical entries (cosine similarity > 0.92)
+3. **Cluster** -- group related memories (similarity > 0.78, min 3 per cluster)
+4. **Summarize** -- LLM collapses clusters into condensed entries (optional, requires LLM)
+5. **Archive** -- truncate ancient content
+
+Consolidation works without an LLM. Phases 1, 2, and 5 are pure math. LLM is only needed for summarization.
+
+### Auto-dedup
+
+When adding memories with `addText()`, Allo automatically checks for near-duplicates (cosine similarity > 0.92). If a match is found, the existing memory is refreshed instead of creating a duplicate.
+
+## Persona Mode
+
+Load any `.engram` brain file as read-only and chat as that person:
+
+```bash
+allo chat --file ~/.allo/brains/tesla.engram --persona "Nikola Tesla"
+```
+
+The LLM receives the brain's content as context and responds in character. Works with any brain file -- historical figures, domain experts, project knowledge bases.
+
+## Providers
+
+Allo uses local embeddings by default (no API key needed). LLM providers are optional, used for chat and smart consolidation.
+
+| Provider | Embeddings | Chat | Auth |
+|----------|-----------|------|------|
+| Local (default) | Xenova/all-MiniLM-L6-v2 | -- | None |
+| Ollama | nomic-embed-text | Any local model | None |
+| Anthropic | -- | Claude | API key or OAuth |
+| OpenAI | -- | GPT-4o | API key |
+| Google | -- | Gemini | API key |
+
+Anthropic OAuth tokens (`sk-ant-oat-*`) are auto-detected during setup.
+
+## Programmatic API
 
 ```typescript
 import { Allo } from '@terronex/allo';
@@ -115,72 +181,54 @@ const brain = new Allo({
 
 await brain.initialize();
 
-// Store memories
-const id = await brain.addText('Project deadline is March 15th', undefined, ['work', 'deadline']);
-await brain.addFile('./diagram.png', 'System architecture diagram', id);
+// Store
+const id = await brain.addText('Deadline is March 15th', undefined, ['work']);
+await brain.addFile('./diagram.png', 'Architecture diagram', id);
 
-// Recall by meaning
+// Recall
 const results = await brain.recall('when is the deadline?');
-// [{ content: 'Project deadline is March 15th', tier: 'hot', score: 0.87, ... }]
+// [{ content: 'Deadline is March 15th', tier: 'hot', score: 0.87, ... }]
 
-// Get everything (for stats, export, etc.)
+// Browse
 const all = brain.getAll();
 
-// Persist
+// Consolidate
+const report = await brain.consolidate();
+// { decayed: 12, deduplicated: 3, clustersFound: 2, ... }
+
+// Forget
+const count = await brain.forget('sensitive topic');
+
+// Save
 await brain.save();
 ```
 
-## CLI Reference
+### AlloMemory Interface
 
-| Command | Description |
-|---------|-------------|
-| `allo` | Interactive menu (no args) |
-| `allo remember [text]` | Add a text memory |
-| `allo remember-file <path>` | Add a file memory |
-| `allo recall <query>` | Semantic search |
-| `allo chat` | Chat with your memories |
-| `allo stats` | Brain health report |
-| `allo setup` | Configure providers |
-| `allo demo` | Guided demo |
-
-### Options
-
-```
--t, --tags <tags>     Comma-separated tags
--p, --parent <id>     Parent memory ID (creates hierarchy)
--f, --file <path>     Use a specific .engram file
--l, --limit <n>       Max recall results (default: 8)
-```
-
-## Architecture
-
-```
-┌─────────────────────────────────────────┐
-│  CLI / Interactive Menu                 │
-├─────────────────────────────────────────┤
-│  Allo Core                              │
-│  ┌───────────┐ ┌──────────┐ ┌────────┐ │
-│  │ addText   │ │ recall   │ │ save   │ │
-│  │ addFile   │ │ getAll   │ │ load   │ │
-│  └───────────┘ └──────────┘ └────────┘ │
-├─────────────────────────────────────────┤
-│  Providers                              │
-│  ┌──────────┐ ┌──────────┐ ┌─────────┐ │
-│  │ Anthropic│ │ Ollama   │ │ OpenAI  │ │
-│  │ (+ OAuth)│ │ (local)  │ │ Gemini  │ │
-│  └──────────┘ └──────────┘ └─────────┘ │
-├─────────────────────────────────────────┤
-│  @terronex/engram                       │
-│  HNSW Index · MemoryTree · Encryption   │
-│  MessagePack · Temporal Decay           │
-├─────────────────────────────────────────┤
-│  allo-memory.engram (single file)       │
-└─────────────────────────────────────────┘
+```typescript
+interface AlloMemory {
+  id: string;
+  type: string;           // text, image, audio, code, summary
+  content: string;
+  timestamp: number;       // created
+  modified: number;
+  lastAccessed: number;
+  accessed: number;        // access count
+  tags: string[];
+  score?: number;          // relevance (0-1) from recall
+  tier: 'hot' | 'warm' | 'cold' | 'archive';
+  parentId: string | null;
+  depth: number;
+  importance: number;      // 0-1
+  confidence: number;      // 0-1
+  source: string;          // 'direct', 'inferred', etc.
+  wordCount: number;
+}
 ```
 
 ## Configuration
 
-Stored in `~/.allo/config.json`:
+Stored in `~/.allo/config.json`. Created by `allo setup` or first run.
 
 ```json
 {
@@ -192,23 +240,48 @@ Stored in `~/.allo/config.json`:
 }
 ```
 
-## Why Allo?
+Brains directory: `~/.allo/brains/` (auto-discovered by browse and switch commands).
 
-Most AI memory is just a vector database with extra steps. Allo is different:
+## Performance
 
-- **One file** — no database server, no cloud dependency. Copy your brain to a USB stick.
-- **Temporal decay** — memories fade naturally. No manual cleanup. No infinite context bloat.
-- **Hierarchical** — memories form trees, not flat lists. Context is preserved.
-- **Multi-modal** — text, images, audio, code, documents. All in one file.
-- **Encrypted** — AES-256-GCM with Argon2id key derivation. Your memories are yours.
-- **Local-first** — embeddings run on your machine. No data leaves unless you choose a cloud LLM.
+Tested against a production brain (4,076 memories, 26 MB, 448 real conversation sessions):
 
-> "The first single-file format that actually tries to behave like a real human long-term memory instead of just being a fancy vector dump." — Grok
+| Metric | Value |
+|--------|-------|
+| Recall accuracy | 96.5% across 399 diverse queries |
+| Average latency | 1.6 ms |
+| P95 latency | 2 ms |
+| P99 latency | 7 ms |
+| Throughput | 609 queries/sec |
+| Adversarial robustness | 100% (zero crashes on 30 edge cases) |
 
-## Technical Details
+Embedding model: Xenova/all-MiniLM-L6-v2 (384 dimensions). Search uses brute-force cosine similarity for brains under 100 nodes, HNSW approximate nearest neighbor for larger brains.
 
-For the deep dive into how the Engram format works, including the full `MemoryNode` schema, HNSW configuration, temporal decay algorithms, and 5-year brain projections, see [GROK_ANALYSIS.md](GROK_ANALYSIS.md).
+## Architecture
+
+```
+CLI / Interactive Menu
+        |
+    Allo Core
+    addText / addFile / recall / forget / consolidate / browse
+        |
+    Providers (Anthropic, OpenAI, Gemini, Ollama)
+        |
+    @terronex/engram (MemoryTree, HNSW, temporal decay)
+    @terronex/engram-trace-lite (consolidation pipeline)
+        |
+    .engram file (single portable binary)
+```
+
+## Ecosystem
+
+Allo is part of the Engram ecosystem:
+
+- **[@terronex/engram](https://github.com/Terronex-dev/engram)** -- Neural memory format library (NPM)
+- **[@terronex/engram-trace](https://github.com/Terronex-dev/engram-trace)** -- Autonomous memory intelligence for agents
+- **[@terronex/engram-trace-lite](https://github.com/Terronex-dev/engram-trace-lite)** -- Stateless consolidation functions
+- **[Rex](https://github.com/Terronex-dev/rex)** -- Terminal AI agent with persistent Engram memory (coming soon)
 
 ## License
 
-MIT - Terronex 2026
+MIT -- [Terronex](https://terronex.dev) 2026
