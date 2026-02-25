@@ -337,20 +337,20 @@ async function doRecall(a: Allo): Promise<void> {
         return;
     }
 
-    // Compact list view
-    while (true) {
-        console.log(theme.accent(`\n  Found ${results.length} memor${results.length === 1 ? 'y' : 'ies'}:\n`));
-        results.forEach((mem, i) => {
-            const tier = tierLabel[mem.tier] || mem.tier;
-            const score = mem.score !== undefined ? `${(mem.score * 100).toFixed(0)}%` : '';
-            const date = formatDate(mem.timestamp);
-            const tags = mem.tags.length > 0 ? theme.dim(` [${mem.tags.join(', ')}]`) : '';
-            const preview = truncate(mem.content, 72);
-            console.log(`  ${theme.primaryBold(`${i + 1}.`)} [${tier}] ${theme.dim(score.padEnd(4))} ${theme.white(preview)}`);
-            console.log(`     ${theme.dim(date)}${tags}`);
-        });
+    // Compact list view — print once
+    console.log(theme.accent(`\n  Found ${results.length} memor${results.length === 1 ? 'y' : 'ies'}:\n`));
+    results.forEach((mem, i) => {
+        const tier = tierLabel[mem.tier] || mem.tier;
+        const score = mem.score !== undefined ? `${(mem.score * 100).toFixed(0)}%` : '';
+        const date = formatDate(mem.timestamp);
+        const tags = mem.tags.length > 0 ? theme.dim(` [${mem.tags.join(', ')}]`) : '';
+        const preview = truncate(mem.content, 72);
+        console.log(`  ${theme.primaryBold(`${i + 1}.`)} [${tier}] ${theme.dim(score.padEnd(4))} ${theme.white(preview)}`);
+        console.log(`     ${theme.dim(date)}${tags}`);
+    });
 
-        // Interactive selection
+    // Interactive selection loop
+    while (true) {
         const { selection } = await inquirer.prompt([{
             type: 'input',
             name: 'selection',
