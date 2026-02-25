@@ -139,7 +139,7 @@ async function interactiveMenu(): Promise<void> {
                 await doSettings();
                 break;
             case 'browse':
-                console.log(theme.dim('\n  Tree browser coming soon.\n'));
+                await doBrowse(a);
                 break;
             case 'exit':
                 console.log(theme.muted('\n  See you later. 🦖\n'));
@@ -367,6 +367,232 @@ async function doRecall(a: Allo): Promise<void> {
         }
     }
     console.log('');
+}
+
+async function doBrowse(a: Allo): Promise<void> {
+    const all = a.getAll();
+    if (all.length === 0) {
+        console.log(theme.dim('\n  No memories yet.\n'));
+        return;
+    }
+
+    while (true) {
+        const { mode } = await inquirer.prompt([{
+            type: 'list',
+            name: 'mode',
+            message: theme.primaryBold('Browse by:'),
+            choices: [
+                { name: theme.accent('  By tag'), value: 'tags' },
+                { name: theme.accent('  By date'), value: 'date' },
+                { name: theme.accent('  By tier'), value: 'tier' },
+                { name: theme.accent('  Recent memories'), value: 'recent' },
+                { name: theme.accent('  Tree view') + theme.dim(' (parent/child)'), value: 'tree' },
+                { name: theme.dim('  Back'), value: 'back' },
+            ],
+        }]);
+
+        if (mode === 'back') break;
+
+        if (mode === 'tags') {
+            await browseByTag(a, all);
+        } else if (mode === 'date') {
+            await browseByDate(a, all);
+        } else if (mode === 'tier') {
+            await browseByTier(a, all);
+        } else if (mode === 'recent') {
+            await browseRecent(a, all);
+        } else if (mode === 'tree') {
+            const hasChildren = all.some(m => m.parentId);
+            if (!hasChildren) {
+                console.log(theme.dim('\n  All memories are flat (no parent-child links).'));
+                console.log(theme.dim('  Use --parent <id> when remembering to build hierarchy.\n'));
+            } else {
+                await browseTree(a, all);
+            }
+        }
+    }
+}
+
+async function browseByTag(a: Allo, all: AlloMemory[]): Promise<void> {
+    const tagCounts = new Map<string, number>();
+    all.forEach(m => m.tags.forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+    const untagged = all.filter(m => m.tags.length === 0).length;
+
+    const sorted = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
+
+    if (sorted.length === 0 && untagged === 0) {
+        console.log(theme.dim('\n  No tags found.\n'));
+        return;
+    }
+
+    const choices = sorted.map(([tag, count]) => ({
+        name: `${theme.accent(tag)} ${theme.dim(`(${count})`)}`,
+        value: tag,
+    }));
+    if (untagged > 0) {
+        choices.push({ name: `${theme.dim('(untagged)')} ${theme.dim(`(${untagged})`)}`, value: '__untagged__' });
+    }
+    choices.push({ name: theme.dim('Back'), value: '__back__' });
+
+    const { tag } = await inquirer.prompt([{
+        type: 'list',
+        name: 'tag',
+        message: theme.white(`Tags (${sorted.length} found):`),
+        choices,
+        pageSize: 15,
+    }]);
+
+    if (tag === '__back__') return;
+
+    const filtered = tag === '__untagged__'
+        ? all.filter(m => m.tags.length === 0)
+        : all.filter(m => m.tags.includes(tag));
+
+    // Sort by date descending
+    filtered.sort((a, b) => b.timestamp - a.timestamp);
+    await showMemoryList(filtered, `Tag: ${tag}`);
+}
+
+async function browseByDate(a: Allo, all: AlloMemory[]): Promise<void> {
+    // Group by YYYY-MM-DD
+    const groups = new Map<string, AlloMemory[]>();
+    all.forEach(m => {
+        const d = new Date(m.timestamp).toISOString().slice(0, 10);
+        if (!groups.has(d)) groups.set(d, []);
+        groups.get(d)!.push(m);
+    });
+
+    const dates = [...groups.keys()].sort().reverse();
+    const choices = dates.slice(0, 30).map(d => ({
+        name: `${theme.white(d)} ${theme.dim(`(${groups.get(d)!.length} memories)`)}`,
+        value: d,
+    }));
+    choices.push({ name: theme.dim('Back'), value: '__back__' });
+
+    const { date } = await inquirer.prompt([{
+        type: 'list',
+        name: 'date',
+        message: theme.white(`Dates (${dates.length} days, showing latest 30):`),
+        choices,
+        pageSize: 15,
+    }]);
+
+    if (date === '__back__') return;
+
+    const filtered = groups.get(date) || [];
+    filtered.sort((a, b) => b.timestamp - a.timestamp);
+    await showMemoryList(filtered, date);
+}
+
+async function browseByTier(a: Allo, all: AlloMemory[]): Promise<void> {
+    const tiers = ['hot', 'warm', 'cold', 'archive'] as const;
+    const counts = { hot: 0, warm: 0, cold: 0, archive: 0 };
+    all.forEach(m => { if (m.tier in counts) counts[m.tier as keyof typeof counts]++; });
+
+    const choices = tiers
+        .filter(t => counts[t] > 0)
+        .map(t => ({
+            name: `${tierLabel[t]} ${theme.dim(`(${counts[t]})`)}`,
+            value: t,
+        }));
+    choices.push({ name: theme.dim('Back'), value: '__back__' as any });
+
+    const { tier } = await inquirer.prompt([{
+        type: 'list',
+        name: 'tier',
+        message: theme.white('Select tier:'),
+        choices,
+    }]);
+
+    if (tier === '__back__') return;
+
+    const filtered = all.filter(m => m.tier === tier);
+    filtered.sort((a, b) => b.timestamp - a.timestamp);
+    await showMemoryList(filtered, `Tier: ${tier}`);
+}
+
+async function browseRecent(a: Allo, all: AlloMemory[]): Promise<void> {
+    const sorted = [...all].sort((a, b) => b.timestamp - a.timestamp).slice(0, 25);
+    await showMemoryList(sorted, 'Recent (latest 25)');
+}
+
+async function browseTree(a: Allo, all: AlloMemory[]): Promise<void> {
+    const roots = all.filter(m => !m.parentId);
+    const childMap = new Map<string, AlloMemory[]>();
+    all.forEach(m => {
+        if (m.parentId) {
+            if (!childMap.has(m.parentId)) childMap.set(m.parentId, []);
+            childMap.get(m.parentId)!.push(m);
+        }
+    });
+
+    // Show roots that have children first
+    const rootsWithKids = roots.filter(r => childMap.has(r.id));
+    const display = rootsWithKids.length > 0 ? rootsWithKids : roots.slice(0, 25);
+
+    console.log(theme.accent(`\n  Memory tree (${roots.length} roots, showing ${display.length}):\n`));
+    display.forEach((root, i) => {
+        const preview = truncate(root.content, 60);
+        console.log(`  ${theme.primaryBold(`${i + 1}.`)} ${theme.white(preview)}`);
+        const kids = childMap.get(root.id) || [];
+        kids.slice(0, 5).forEach(child => {
+            const cp = truncate(child.content, 55);
+            console.log(`     ${theme.dim('└─')} ${theme.dim(cp)}`);
+        });
+        if (kids.length > 5) {
+            console.log(`     ${theme.dim(`   ... and ${kids.length - 5} more children`)}`);
+        }
+    });
+    console.log('');
+}
+
+async function showMemoryList(memories: AlloMemory[], label: string): Promise<void> {
+    if (memories.length === 0) {
+        console.log(theme.dim('\n  No memories in this group.\n'));
+        return;
+    }
+
+    const pageSize = 15;
+    let page = 0;
+    const totalPages = Math.ceil(memories.length / pageSize);
+
+    while (true) {
+        const start = page * pageSize;
+        const slice = memories.slice(start, start + pageSize);
+
+        console.log(theme.accent(`\n  ${label}`) + theme.dim(` — ${memories.length} memories (page ${page + 1}/${totalPages})\n`));
+        slice.forEach((mem, i) => {
+            const tier = tierLabel[mem.tier] || mem.tier;
+            const score = mem.score !== undefined ? `${(mem.score * 100).toFixed(0)}%` : '';
+            const date = formatDate(mem.timestamp);
+            const tags = mem.tags.length > 0 ? theme.dim(` [${mem.tags.join(', ')}]`) : '';
+            const preview = truncate(mem.content, 72);
+            const num = start + i + 1;
+            console.log(`  ${theme.primaryBold(`${num}.`)} [${tier}] ${score ? theme.dim(score.padEnd(4)) + ' ' : ''}${theme.white(preview)}`);
+            console.log(`     ${theme.dim(date)}${tags}`);
+        });
+
+        // Build prompt options
+        const opts: string[] = [`1-${start + slice.length}`];
+        if (page > 0) opts.push('[p]rev');
+        if (page < totalPages - 1) opts.push('[n]ext');
+        opts.push('Enter=back');
+
+        const { selection } = await inquirer.prompt([{
+            type: 'input',
+            name: 'selection',
+            message: theme.muted(`View ${opts.join(', ')}:`),
+        }]);
+
+        if (!selection) break;
+        if (selection.toLowerCase() === 'n' && page < totalPages - 1) { page++; continue; }
+        if (selection.toLowerCase() === 'p' && page > 0) { page--; continue; }
+
+        const idx = parseInt(selection) - 1;
+        if (idx >= 0 && idx < memories.length) {
+            printMemoryDetail(idx, memories[idx]);
+        }
+    }
 }
 
 async function doChat(a: Allo, persona?: string): Promise<void> {
@@ -741,6 +967,15 @@ program
         } else {
             spinner.info(theme.dim('No matching memories found.'));
         }
+    });
+
+program
+    .command('browse')
+    .description('Browse your memory tree by tag, date, tier, or hierarchy')
+    .option('-f, --file <path>', 'Memory file path')
+    .action(async (options) => {
+        const a = await getAllo(options);
+        await doBrowse(a);
     });
 
 program
