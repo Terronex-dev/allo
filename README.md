@@ -6,6 +6,8 @@
 [![Powered by Engram](https://img.shields.io/badge/Powered%20by-Engram-ef4444)](https://github.com/Terronex-dev/engram)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+![Allo CLI](assets/cli-screenshot.png)
+
 Allo stores memories in a single `.engram` file, retrieves them by meaning using semantic search, and curates them over time with temporal decay. Recent memories stay vivid. Old ones fade to summaries. Duplicates merge automatically.
 
 Built on [@terronex/engram](https://github.com/Terronex-dev/engram) and [@terronex/engram-trace-lite](https://github.com/Terronex-dev/engram-trace-lite).
