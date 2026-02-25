@@ -1,9 +1,9 @@
-# Engram v1.0.0
+# Engram
 
 > **Neural Memory Format for AI Systems**  
 > High-performance hierarchical, temporal, multi-modal memory format inspired by biological memory traces
 
-[![npm version](https://badge.fury.io/js/@terronex%2Fengram.svg)](https://badge.fury.io/js/@terronex%2Fengram)
+[![npm version](https://img.shields.io/npm/v/@terronex/engram.svg)](https://www.npmjs.com/package/@terronex/engram)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 

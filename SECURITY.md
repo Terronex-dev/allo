@@ -14,7 +14,7 @@ If you discover a security vulnerability, please email **contact@terronex.dev** 
 
 ### Encryption
 
-- Allo supports AES-256-GCM encryption with PBKDF2 key derivation (100,000 iterations, SHA-256) for `.engram` files.
+- Allo supports AES-256-GCM encryption with argon2id key derivation (64MB memory, 3 iterations) for `.engram` files. Falls back to PBKDF2 (100,000 iterations, SHA-256) if argon2 is not available.
 - Pass a `password` option when creating an Allo instance to enable encryption.
 - Encryption is optional and off by default.
 

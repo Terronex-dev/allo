@@ -20,7 +20,7 @@ export interface EngramHeader {
 export interface SecurityConfig {
   encrypted: boolean;
   algorithm: 'aes-256-gcm' | 'none';
-  kdf: 'argon2id' | 'none';
+  kdf: 'argon2id' | 'pbkdf2' | 'none';
   salt?: Uint8Array;
   nonce?: Uint8Array;
   integrity: Uint8Array;

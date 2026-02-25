@@ -163,7 +163,7 @@ export class Allo {
                 security: {
                     encrypted: !!this.config.password,
                     algorithm: this.config.password ? 'aes-256-gcm' : 'none',
-                    kdf: this.config.password ? 'pbkdf2' : 'none',
+                    kdf: this.config.password ? 'argon2id' : 'none',
                     integrity: new Uint8Array(),
                 },
                 metadata: {
