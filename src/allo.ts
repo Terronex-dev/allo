@@ -129,9 +129,12 @@ export class Allo {
                 this.config.persona = meta.persona;
             }
         } catch (error: any) {
-            if (error.code !== 'ENOENT') {
-                console.error('Memory load error:', error.message);
+            if (error.code === 'ENOENT') {
+                // File doesn't exist yet — start fresh (expected on first run)
+                return;
             }
+            // Encryption/decryption errors, corrupt files, etc. must propagate
+            throw error;
         }
     }
 
@@ -160,7 +163,7 @@ export class Allo {
                 security: {
                     encrypted: !!this.config.password,
                     algorithm: this.config.password ? 'aes-256-gcm' : 'none',
-                    kdf: this.config.password ? 'argon2id' : 'none',
+                    kdf: this.config.password ? 'pbkdf2' : 'none',
                     integrity: new Uint8Array(),
                 },
                 metadata: {
