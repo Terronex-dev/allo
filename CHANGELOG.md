@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0 (2026-02-27)
+
+### Features
+
+- Model switcher in Settings menu -- switch LLM provider and model without re-running setup
+- Auto-detects installed Ollama models via API
+- Lists current Anthropic models: Opus 4.6, Sonnet 4.6, Haiku 4.5, Opus 4.5, Sonnet 4
+- Lists OpenAI models: GPT-4o, GPT-4o Mini, o3
+- Lists Google models: Gemini 2.5 Pro, Gemini 2.5 Flash
+- Embedding model switcher: Local Xenova and Ollama embed models
+- Add API keys inline from Settings (no full setup re-run needed)
+- Shows active model indicator and greys out providers without keys
+- Warning when switching embedding models about re-embedding needs
+- Config saved immediately on switch
+
 ## 1.0.0 (2026-02-24)
 
 ### Features

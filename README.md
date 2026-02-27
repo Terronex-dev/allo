@@ -171,6 +171,22 @@ Allo uses local embeddings by default (no API key needed). LLM providers are opt
 
 Anthropic OAuth tokens (`sk-ant-oat-*`) are auto-detected during setup.
 
+### Switching Models
+
+Switch LLM or embedding models on the fly from the interactive menu:
+
+```bash
+allo
+# Settings > Switch LLM > pick a model
+# Settings > Switch embeddings > pick a model
+```
+
+- Auto-detects installed Ollama models
+- Lists current Anthropic, OpenAI, and Google models
+- Add API keys inline without re-running full setup
+- Shows which model is active, greys out providers without keys
+- Config saved immediately -- no restart needed
+
 ## Programmatic API
 
 ```typescript

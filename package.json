@@ -1,6 +1,6 @@
 {
   "name": "@terronex/allo",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Allo - Your Neural Memory Assistant. The different kind of AI memory that grows with you.",
   "type": "module",
   "main": "dist/index.js",
