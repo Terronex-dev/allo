@@ -11,7 +11,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { Allo } from './allo.js';
 import { theme, HEADER, HEADER_COMPACT, banner, separator, box, tierLabel } from './theme.js';
-import { loadConfig, configExists, createLLM, ProviderConfig } from './providers.js';
+import { loadConfig, saveConfig, configExists, createLLM, ProviderConfig } from './providers.js';
 import { runOnboarding } from './onboarding.js';
 import { discoverBrains, ensureBrainsDir, BrainInfo } from './brains.js';
 
@@ -766,29 +766,222 @@ async function doStats(a: Allo): Promise<void> {
 }
 
 async function doSettings(): Promise<void> {
-    const { action } = await inquirer.prompt([{
+    while (true) {
+        const llmLabel = config.llm
+            ? `${config.llm.provider}/${config.llm.model}`
+            : 'None configured';
+        const embLabel = `${config.embeddings.provider}/${config.embeddings.model}`;
+
+        const { action } = await inquirer.prompt([{
+            type: 'list',
+            name: 'action',
+            message: theme.white('Settings:'),
+            choices: [
+                { name: theme.primary(`  Switch LLM`) + theme.dim(` (current: ${llmLabel})`), value: 'llm' },
+                { name: theme.primary(`  Switch embeddings`) + theme.dim(` (current: ${embLabel})`), value: 'embeddings' },
+                { name: theme.muted('  Re-run setup wizard'), value: 'setup' },
+                { name: theme.muted('  View current config'), value: 'view' },
+                { name: theme.dim('  Back'), value: 'back' },
+            ],
+        }]);
+
+        if (action === 'back') break;
+
+        if (action === 'llm') {
+            await doSwitchLLM();
+        } else if (action === 'embeddings') {
+            await doSwitchEmbeddings();
+        } else if (action === 'setup') {
+            config = await runOnboarding();
+        } else if (action === 'view') {
+            const cfg = await loadConfig();
+            console.log('');
+            console.log(theme.dim(JSON.stringify(cfg, (k, v) => {
+                if (k === 'anthropic' || k === 'openai' || k === 'google') {
+                    return typeof v === 'string' ? v.slice(0, 8) + '...' : v;
+                }
+                return v;
+            }, 2)));
+            console.log('');
+        }
+    }
+}
+
+async function doSwitchLLM(): Promise<void> {
+    // Detect available Ollama models
+    let ollamaModels: string[] = [];
+    try {
+        const ollamaUrl = config.ollamaUrl || 'http://localhost:11434';
+        const res = await fetch(`${ollamaUrl}/api/tags`);
+        if (res.ok) {
+            const data = await res.json() as any;
+            ollamaModels = (data.models || [])
+                .map((m: any) => m.name)
+                .filter((n: string) => !n.includes('embed'));
+        }
+    } catch {}
+
+    const choices: any[] = [];
+
+    // Ollama models (auto-detected)
+    if (ollamaModels.length > 0) {
+        for (const model of ollamaModels) {
+            const active = config.llm?.provider === 'ollama' && config.llm?.model === model;
+            choices.push({
+                name: theme.white(`  Ollama: ${model}`) + (active ? theme.success(' (active)') : ''),
+                value: { provider: 'ollama', model },
+            });
+        }
+    } else {
+        choices.push({
+            name: theme.dim('  Ollama: not running'),
+            value: null,
+            disabled: true,
+        });
+    }
+
+    // Anthropic models
+    const anthropicModels = [
+        { id: 'claude-opus-4-6-20250205', label: 'Opus 4.6 (most intelligent)' },
+        { id: 'claude-sonnet-4-6-20250217', label: 'Sonnet 4.6 (fast + capable)' },
+        { id: 'claude-haiku-4-5-20251015', label: 'Haiku 4.5 (fastest, cheapest)' },
+        { id: 'claude-opus-4-5-20251124', label: 'Opus 4.5 (deep reasoning)' },
+        { id: 'claude-sonnet-4-20250514', label: 'Sonnet 4 (balanced)' },
+    ];
+    const hasAnthropic = !!config.keys?.anthropic;
+    for (const m of anthropicModels) {
+        const active = config.llm?.provider === 'anthropic' && config.llm?.model === m.id;
+        choices.push({
+            name: (hasAnthropic ? theme.white : theme.dim)(`  Anthropic: ${m.label}`) + (active ? theme.success(' (active)') : ''),
+            value: hasAnthropic ? { provider: 'anthropic', model: m.id } : null,
+            disabled: hasAnthropic ? false : 'no API key',
+        });
+    }
+
+    // OpenAI models
+    const openaiModels = [
+        { id: 'gpt-4o', label: 'GPT-4o (flagship)' },
+        { id: 'gpt-4o-mini', label: 'GPT-4o Mini (fast, cheap)' },
+        { id: 'o3', label: 'o3 (reasoning)' },
+    ];
+    const hasOpenAI = !!config.keys?.openai;
+    for (const m of openaiModels) {
+        const active = config.llm?.provider === 'openai' && config.llm?.model === m.id;
+        choices.push({
+            name: (hasOpenAI ? theme.white : theme.dim)(`  OpenAI: ${m.label}`) + (active ? theme.success(' (active)') : ''),
+            value: hasOpenAI ? { provider: 'openai', model: m.id } : null,
+            disabled: hasOpenAI ? false : 'no API key',
+        });
+    }
+
+    // Google models
+    const googleModels = [
+        { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+        { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (fast)' },
+    ];
+    const hasGoogle = !!config.keys?.google;
+    for (const m of googleModels) {
+        const active = config.llm?.provider === 'google' && config.llm?.model === m.id;
+        choices.push({
+            name: (hasGoogle ? theme.white : theme.dim)(`  Google: ${m.label}`) + (active ? theme.success(' (active)') : ''),
+            value: hasGoogle ? { provider: 'google', model: m.id } : null,
+            disabled: hasGoogle ? false : 'no API key',
+        });
+    }
+
+    // Add API key option
+    choices.push(
+        { name: theme.accent('  + Add API key'), value: 'add-key' },
+        { name: theme.dim('  Cancel'), value: 'cancel' },
+    );
+
+    const { selected } = await inquirer.prompt([{
         type: 'list',
-        name: 'action',
-        message: theme.white('Settings:'),
-        choices: [
-            { name: 'Re-run setup wizard', value: 'setup' },
-            { name: 'View current config', value: 'view' },
-            { name: theme.dim('Back'), value: 'back' },
-        ],
+        name: 'selected',
+        message: theme.primaryBold('Switch LLM:'),
+        choices,
+        pageSize: 20,
     }]);
 
-    if (action === 'setup') {
-        config = await runOnboarding();
-    } else if (action === 'view') {
-        const cfg = await loadConfig();
-        console.log('');
-        console.log(theme.dim(JSON.stringify(cfg, (k, v) => {
-            if (k === 'anthropic' || k === 'openai' || k === 'google') {
-                return typeof v === 'string' ? v.slice(0, 8) + '...' : v;
+    if (selected === 'cancel' || selected === null) return;
+
+    if (selected === 'add-key') {
+        const { provider } = await inquirer.prompt([{
+            type: 'list',
+            name: 'provider',
+            message: theme.white('Provider:'),
+            choices: [
+                { name: 'Anthropic', value: 'anthropic' },
+                { name: 'OpenAI', value: 'openai' },
+                { name: 'Google', value: 'google' },
+            ],
+        }]);
+        const { key } = await inquirer.prompt([{
+            type: 'password',
+            name: 'key',
+            message: theme.white(`API key for ${provider}:`),
+            mask: '*',
+        }]);
+        if (key) {
+            config.keys[provider] = key;
+            await saveConfig(config);
+            console.log(theme.success(`\n  API key saved for ${provider}.\n`));
+        }
+        return;
+    }
+
+    config.llm = selected;
+    await saveConfig(config);
+    console.log(theme.success(`\n  LLM switched to ${selected.provider}/${selected.model}\n`));
+}
+
+async function doSwitchEmbeddings(): Promise<void> {
+    const choices: any[] = [
+        {
+            name: theme.white('  Local: Xenova/all-MiniLM-L6-v2 (384 dims, no API needed)'),
+            value: { provider: 'local', model: 'Xenova/all-MiniLM-L6-v2' },
+        },
+    ];
+
+    // Check for Ollama embedding models
+    try {
+        const ollamaUrl = config.ollamaUrl || 'http://localhost:11434';
+        const res = await fetch(`${ollamaUrl}/api/tags`);
+        if (res.ok) {
+            const data = await res.json() as any;
+            const embedModels = (data.models || [])
+                .map((m: any) => m.name)
+                .filter((n: string) => n.includes('embed') || n.includes('nomic'));
+            for (const model of embedModels) {
+                choices.push({
+                    name: theme.white(`  Ollama: ${model}`),
+                    value: { provider: 'ollama', model },
+                });
             }
-            return v;
-        }, 2)));
-        console.log('');
+        }
+    } catch {}
+
+    choices.push({ name: theme.dim('  Cancel'), value: 'cancel' });
+
+    const { selected } = await inquirer.prompt([{
+        type: 'list',
+        name: 'selected',
+        message: theme.primaryBold('Switch embeddings:'),
+        choices,
+    }]);
+
+    if (selected === 'cancel') return;
+
+    const oldModel = config.embeddings.model;
+    config.embeddings = selected;
+    await saveConfig(config);
+
+    if (oldModel !== selected.model) {
+        console.log(theme.accent(`\n  Embeddings switched to ${selected.provider}/${selected.model}`));
+        console.log(theme.accent('  WARNING: Changing embedding models means existing memories'));
+        console.log(theme.accent('  will need re-embedding for accurate search results.\n'));
+    } else {
+        console.log(theme.success(`\n  Embeddings: ${selected.provider}/${selected.model}\n`));
     }
 }
 
