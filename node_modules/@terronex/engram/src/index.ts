@@ -1,7 +1,8 @@
 /**
- * Engram v1.0.4
+ * Engram v2.0.0
  * 
  * Neural memory format for AI systems - hierarchical, temporal, multi-modal
+ * V2: Graph extensions with typed links, spatial positions, and auto-linking
  * 
  * @packageDocumentation
  */
@@ -9,7 +10,7 @@
 // Types
 export * from './types';
 export type { HNSWConfig } from './types';
-export { DEFAULT_HNSW_CONFIG } from './types';
+export { DEFAULT_HNSW_CONFIG, DEFAULT_EMBEDDING_CONFIG } from './types';
 
 // Core
 export {
@@ -26,6 +27,12 @@ export {
   createLink
 } from './core';
 
+// V2: Graph extensions
+export {
+  MemoryGraph,
+  Position
+} from './graph';
+
 // I/O
 export {
   writeEngram,
@@ -41,5 +48,5 @@ export {
 } from './io';
 
 // Version info
-export const VERSION = '1.0.4';
-export const FORMAT_VERSION = [1, 0] as const;
+export const VERSION = '2.0.0';
+export const FORMAT_VERSION = [2, 0] as const;

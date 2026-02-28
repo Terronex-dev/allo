@@ -14,13 +14,14 @@ import {
   Entity,
   MemoryLink,
   Delta,
-  SecurityConfig
+  SecurityConfig,
+  DEFAULT_EMBEDDING_CONFIG
 } from './types';
 
 // ============== CONSTANTS ==============
 
 const MAGIC = Buffer.from('ENGRAM');
-const VERSION_MAJOR = 1;
+const VERSION_MAJOR = 2;  // V2: Graph extensions
 const VERSION_MINOR = 0;
 export const ENGRAM_EXTENSION = '.engram';
 const HEADER_OFFSET = 12; // magic(6) + version(2) + headerLen(4)
@@ -85,9 +86,11 @@ export async function writeEngram(
     };
   }
   
-  // Build header
+  // Build header (ensure V2 embedding config is present)
   const header: EngramHeader = {
     ...file.header,
+    version: [2, 0],
+    embedding: file.header.embedding ?? DEFAULT_EMBEDDING_CONFIG,
     security,
     modified: Date.now()
   };
@@ -166,14 +169,11 @@ export async function readEngram(
     throw new Error('Invalid Engram file: bad magic bytes');
   }
   
-  // Check version
+  // Check version (supports V1 and V2)
   const majorVersion = data[6];
   const minorVersion = data[7];
   
-  if (majorVersion !== VERSION_MAJOR) {
-    if (majorVersion === 2) {
-      throw new Error('This is a v2 file. Use migrateV2toEngram() first.');
-    }
+  if (majorVersion !== 1 && majorVersion !== 2) {
     throw new Error(`Unsupported version: ${majorVersion}.${minorVersion}`);
   }
   
@@ -470,7 +470,7 @@ export function migrateV2toEngram(v2Data: AifBinV2): EngramFile {
   
   return {
     header: {
-      version: [1, 0],
+      version: [2, 0],
       created: v2Data.created,
       modified: now,
       

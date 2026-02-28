@@ -3,7 +3,9 @@ import path from 'node:path';
 import {
     MemoryTree, createNode, writeEngramFile, readEngramFile, searchNodes, touchNode,
     DEFAULT_HNSW_CONFIG, MemoryNode, EngramFile, ContentType, SearchOptions,
-    generateId as engramGenerateId, SearchResult
+    generateId as engramGenerateId, SearchResult,
+    // V2 Graph extensions
+    MemoryGraph, MemoryLink
 } from '@terronex/engram';
 import { pipeline, env } from '@xenova/transformers';
 import mime from 'mime-types';
@@ -52,6 +54,8 @@ const HNSW_DIMS = 384;
 
 export class Allo {
     private tree: MemoryTree;
+    private graph: MemoryGraph | null = null;  // V2 graph
+    private links: MemoryLink[] = [];  // V2 links storage
     public config: Required<AlloConfig>;
     private embedder: any = null;
     private isInitialized = false;
@@ -123,6 +127,11 @@ export class Allo {
                 }
             }
             this.tree = this.createTree(engramFile.nodes);
+            
+            // V2: Initialize graph with links from file
+            this.links = engramFile.links || [];
+            this.graph = new MemoryGraph(this.tree, this.links);
+            
             // Auto-detect persona from file metadata
             const meta = engramFile.header?.metadata as any;
             if (meta?.persona && !this.config.persona) {
@@ -155,11 +164,14 @@ export class Allo {
             ? nodes.reduce((a, b) => a.temporal.created < b.temporal.created ? a : b)
             : undefined;
 
+        // V2: Get links from graph
+        const graphLinks = this.graph ? this.graph.getAllLinks() : this.links;
+        
         const engramFile: EngramFile = {
             header: {
                 created: oldest?.temporal.created || Date.now(),
                 modified: Date.now(),
-                version: [1, 0],
+                version: [2, 0],  // V2 format
                 security: {
                     encrypted: !!this.config.password,
                     algorithm: this.config.password ? 'aes-256-gcm' : 'none',
@@ -167,7 +179,7 @@ export class Allo {
                     integrity: new Uint8Array(),
                 },
                 metadata: {
-                    source: '@terronex/allo v1.0.0',
+                    source: '@terronex/allo v2.0.0',  // V2
                     description: this.config.persona
                         ? `${this.config.persona} — Neural Memory Brain`
                         : 'Personal AI memory powered by Engram',
@@ -186,12 +198,18 @@ export class Allo {
                     rootNodes: this.tree.getRoots().length,
                     maxDepth: Math.max(0, ...nodes.map(n => n.depth)),
                     entityCount: 0,
-                    linkCount: 0,
+                    linkCount: graphLinks.length,  // V2: track links
                 },
+                // V2: Embedding config
+                embedding: {
+                    model: this.config.embeddingModel,
+                    dimensions: HNSW_DIMS,
+                    provider: 'local'
+                }
             },
             nodes,
             entities: [],
-            links: [],
+            links: graphLinks,  // V2: save links
             deltas: [],
         };
 
@@ -213,6 +231,16 @@ export class Allo {
             nodeCount: nodes.length,
             fileSizeMB: 0, // Unknown without disk stat; use save() for accurate size
         };
+    }
+
+    /**
+     * V2: Get the MemoryGraph for graph operations
+     */
+    getGraph(): MemoryGraph | null {
+        if (!this.graph && this.tree) {
+            this.graph = new MemoryGraph(this.tree, this.links);
+        }
+        return this.graph;
     }
 
     async addText(text: string, parentId?: string, tags: string[] = [], dedupThreshold = 0.92): Promise<string> {

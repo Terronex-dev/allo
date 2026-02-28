@@ -5,6 +5,89 @@ All notable changes to the Engram project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-02-28
+
+### MAJOR: Graph Extensions
+
+**Engram V2 transforms the memory format from a tree to a graph.** Memories can now have typed relationships beyond parent-child, enabling knowledge graphs and reasoning chains.
+
+### Added
+
+#### MemoryGraph Class
+- **`MemoryGraph`**: New class for graph operations on top of MemoryTree
+- **`addLink(link)`**: Create typed relationships between nodes
+- **`removeLink(linkId)`**: Remove relationships
+- **`getLinks(nodeId, direction)`**: Get links (outgoing, incoming, or both)
+- **`getLinkedNodes(nodeId, type?)`**: Get nodes connected by links, optionally filtered by type
+- **`getSupporting(nodeId)`**: Get nodes that support/elaborate a given node
+- **`getContradicting(nodeId)`**: Get nodes that contradict a given node
+
+#### Graph Traversal
+- **`findPath(fromId, toId, maxDepth?)`**: BFS shortest path between nodes
+- **`getNeighborhood(nodeId, depth?)`**: Get all nodes within N hops
+
+#### Auto-Linking
+- **`autoLinkSimilar(threshold?)`**: Automatically link nodes with high embedding similarity
+
+#### Spatial Positions
+- **`setPosition(nodeId, position)`**: Set 2D/3D coordinates for visualization
+- **`getPosition(nodeId)`**: Get node position
+- **`getPinnedPositions()`**: Get only user-pinned positions (for persistence)
+- **`Position` interface**: `{ x, y, z?, pinned? }`
+
+#### Node Extensions
+- **`confidence`**: Optional 0.0-1.0 reliability score on MemoryNode
+- **`position`**: Optional spatial coordinates on MemoryNode
+
+#### Header Extensions
+- **`EmbeddingConfig`**: Documents embedding model, dimensions, provider
+- **`SpatialConfig`**: Documents projection method (umap, tsne, pca, manual)
+- **`DEFAULT_EMBEDDING_CONFIG`**: Standard config (all-MiniLM-L6-v2, 384 dims)
+
+#### Link Types
+- `related` — General association
+- `supports` — Evidence for a claim
+- `contradicts` — Conflicts with
+- `follows` — Temporal or logical sequence
+- `derived_from` — Created from source
+- `similar_to` — Auto-generated from embeddings
+- Custom string types allowed
+
+### Changed
+- **Version byte**: Files now write `0x02 0x00` (V2)
+- **Header**: Includes embedding config by default
+- **I/O**: Reader accepts both V1 and V2 files (backward compatible)
+
+### Technical
+- 66 tests passing (31 new graph tests)
+- Full V2 specification: `SPEC_V2.md`
+- Backward compatible: V2 readers handle V1 files
+- Forward compatible: V1 readers ignore V2 fields (MessagePack)
+
+### Migration
+No migration required. V1 files work seamlessly with V2 SDK.
+
+```typescript
+// V2 Usage
+import { MemoryTree, MemoryGraph, createLink } from '@terronex/engram';
+
+const tree = new MemoryTree(nodes);
+const graph = new MemoryGraph(tree);
+
+// Add typed relationships
+graph.addLink(createLink(evidenceId, claimId, 'supports'));
+
+// Query the graph
+const supporting = graph.getLinkedNodes(claimId, 'supports');
+const path = graph.findPath(startId, endId);
+const nearby = graph.getNeighborhood(nodeId, 2);
+
+// Auto-link similar content
+graph.autoLinkSimilar(0.85);
+```
+
+---
+
 ## [1.0.4] - 2026-02-22
 
 ### BRANDING CLEANUP
