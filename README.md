@@ -54,6 +54,8 @@ const results = await allo.spatialRecall(
 const related = await allo.findNearby(memoryId, 10);
 ```
 
+See [SPEC_V2.md](https://github.com/Terronex-dev/engram/blob/main/SPEC_V2.md) for the full format specification.
+
 ## Install
 
 ```bash

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0 (2026-02-28)
+
+### Features: Spatial Intelligence (V2.1)
+
+- `spatialRecall()` -- Find memories within a radius of a point
+- `findNearby()` -- Find memories near another memory
+- `setPosition()` -- Set 2D/3D coordinates on a memory
+- `getPosition()` -- Get coordinates of a memory
+- Supports Haversine (geo) and Euclidean (abstract) distance metrics
+- Hybrid semantic + spatial queries
+- Updated to @terronex/engram@2.1.0
+
 ## 1.1.0 (2026-02-27)
 
 ### Features
