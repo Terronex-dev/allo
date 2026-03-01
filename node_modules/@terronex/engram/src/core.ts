@@ -581,6 +581,170 @@ export function searchNodesBruteForce(
   return results.slice(0, topK);
 }
 
+// ============== SPATIAL ==============
+
+export interface SpatialSearchOptions {
+  // Semantic component (optional)
+  queryEmbedding?: Float32Array;
+  
+  // Spatial component (required)
+  center: { x: number; y: number; z?: number };
+  radius: number;  // Distance units (meters for geo, abstract for 2D/3D)
+  
+  // Distance metric
+  metric?: 'euclidean' | 'haversine';
+  
+  // Standard options
+  limit?: number;
+  minScore?: number;
+  includeArchived?: boolean;
+}
+
+export interface SpatialResult {
+  node: MemoryNode;
+  distance: number;
+  score?: number;  // Only if semantic search was used
+}
+
+/**
+ * Haversine distance between two lat/lon points
+ * Returns distance in kilometers
+ */
+export function haversineDistance(
+  lat1: number, lon1: number,
+  lat2: number, lon2: number
+): number {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Euclidean distance between two 2D/3D points
+ */
+export function euclideanDistance(
+  x1: number, y1: number, z1: number = 0,
+  x2: number, y2: number, z2: number = 0
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dz = z2 - z1;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+/**
+ * Spatial recall: find memories within a radius of a point
+ * Optionally filtered by semantic similarity
+ */
+export function spatialRecall(
+  tree: MemoryTree,
+  options: SpatialSearchOptions
+): SpatialResult[] {
+  const {
+    queryEmbedding,
+    center,
+    radius,
+    metric = 'euclidean',
+    limit = 10,
+    minScore = 0,
+    includeArchived = false
+  } = options;
+  
+  const results: SpatialResult[] = [];
+  
+  // If semantic query provided, start with semantic search
+  let candidates: MemoryNode[];
+  let scoreMap: Map<string, number> | null = null;
+  
+  if (queryEmbedding) {
+    // Get more candidates than needed to account for spatial filtering
+    const semanticResults = searchNodes(tree, queryEmbedding, {
+      query: '',
+      topK: Math.max(limit * 5, 100),
+      minScore: minScore,
+      includeArchived
+    });
+    
+    candidates = semanticResults.map(r => r.node);
+    scoreMap = new Map(semanticResults.map(r => [r.node.id, r.score]));
+  } else {
+    // No semantic filter - consider all nodes
+    candidates = tree.getAll();
+  }
+  
+  // Filter by spatial distance
+  for (const node of candidates) {
+    // Skip nodes without position
+    if (!node.position) continue;
+    
+    // Skip archived unless requested
+    if (!includeArchived && node.temporal.decayTier === 'archive') continue;
+    
+    // Calculate distance
+    let distance: number;
+    if (metric === 'haversine') {
+      // Treat x as latitude, y as longitude
+      distance = haversineDistance(
+        center.x, center.y,
+        node.position.x, node.position.y
+      );
+    } else {
+      distance = euclideanDistance(
+        center.x, center.y, center.z ?? 0,
+        node.position.x, node.position.y, node.position.z ?? 0
+      );
+    }
+    
+    // Check if within radius
+    if (distance <= radius) {
+      results.push({
+        node,
+        distance,
+        score: scoreMap?.get(node.id)
+      });
+    }
+  }
+  
+  // Sort by distance (closest first)
+  results.sort((a, b) => a.distance - b.distance);
+  
+  return results.slice(0, limit);
+}
+
+/**
+ * Find nodes near a specific node
+ */
+export function findNearby(
+  tree: MemoryTree,
+  nodeId: string,
+  radius: number,
+  options: {
+    metric?: 'euclidean' | 'haversine';
+    limit?: number;
+    includeArchived?: boolean;
+  } = {}
+): SpatialResult[] {
+  const node = tree.get(nodeId);
+  if (!node?.position) {
+    throw new Error(`Node ${nodeId} not found or has no position`);
+  }
+  
+  return spatialRecall(tree, {
+    center: node.position,
+    radius,
+    metric: options.metric,
+    limit: options.limit,
+    includeArchived: options.includeArchived
+  }).filter(r => r.node.id !== nodeId); // Exclude the source node
+}
+
 // ============== FACTORY ==============
 
 export function createNode(

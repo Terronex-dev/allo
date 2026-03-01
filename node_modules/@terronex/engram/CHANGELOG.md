@@ -5,6 +5,37 @@ All notable changes to the Engram project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-02-28
+
+### Added: Spatial Intelligence
+
+**V2.1 makes spatial positions queryable.** Find memories by location, not just meaning.
+
+#### Distance Functions
+- **`haversineDistance(lat1, lon1, lat2, lon2)`**: Calculate distance in km between two geo points
+- **`euclideanDistance(x1, y1, z1, x2, y2, z2)`**: Calculate distance in abstract 2D/3D space
+
+#### Spatial Recall
+- **`spatialRecall(tree, options)`**: Find nodes within a radius of a point
+  - Supports both semantic + spatial filtering (hybrid queries)
+  - `metric: 'haversine' | 'euclidean'` — geo or abstract coordinates
+  - `radius` — distance limit
+  - `center: { x, y, z? }` — query point
+  - Returns `SpatialResult[]` sorted by distance
+
+- **`findNearby(tree, nodeId, radius, options)`**: Find nodes near a specific node
+
+#### Types
+- **`SpatialSearchOptions`**: Options for spatial queries
+- **`SpatialResult`**: Result with node, distance, and optional semantic score
+
+### Use Cases
+- Geography curricula: "Find capitals within 500km of Paris"
+- Anatomy education: "What's near the hippocampus?"
+- Geo-aware agents: "What do I know about this location?"
+
+---
+
 ## [2.0.0] - 2026-02-28
 
 ### MAJOR: Graph Extensions

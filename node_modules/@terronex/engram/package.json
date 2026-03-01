@@ -1,6 +1,6 @@
 {
   "name": "@terronex/engram",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Engram - High-performance hierarchical, temporal, multi-modal AI memory format with neural-inspired architecture",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -5,7 +5,11 @@ import {
     DEFAULT_HNSW_CONFIG, MemoryNode, EngramFile, ContentType, SearchOptions,
     generateId as engramGenerateId, SearchResult,
     // V2 Graph extensions
-    MemoryGraph, MemoryLink
+    MemoryGraph, MemoryLink,
+    // V2.1 Spatial extensions
+    spatialRecall as engramSpatialRecall, findNearby as engramFindNearby,
+    haversineDistance, euclideanDistance,
+    SpatialSearchOptions, SpatialResult
 } from '@terronex/engram';
 import { pipeline, env } from '@xenova/transformers';
 import mime from 'mime-types';
@@ -350,6 +354,81 @@ export class Allo {
         }
 
         return results.map(r => this.toAlloMemory(r.node, r.score));
+    }
+
+    /**
+     * V2.1: Spatial recall — find memories within a radius of a point
+     * @param center The center point { x, y, z? } or { lat, lon } for geo queries
+     * @param radius Distance limit (km for haversine, abstract units for euclidean)
+     * @param options Additional options (metric, query, limit)
+     */
+    async spatialRecall(
+        center: { x: number; y: number; z?: number },
+        radius: number,
+        options: {
+            metric?: 'euclidean' | 'haversine';
+            query?: string;
+            limit?: number;
+        } = {}
+    ): Promise<AlloMemory[]> {
+        await this.ensureInitialized();
+        
+        const { metric = 'euclidean', query, limit = 10 } = options;
+        
+        // Get query embedding if semantic filter provided
+        let queryEmbedding: Float32Array | undefined;
+        if (query) {
+            queryEmbedding = await this.generateEmbedding(query);
+        }
+        
+        const results = engramSpatialRecall(this.tree, {
+            center,
+            radius,
+            metric,
+            queryEmbedding,
+            limit
+        });
+        
+        return results.map(r => this.toAlloMemory(r.node, r.score));
+    }
+    
+    /**
+     * V2.1: Find memories near another memory
+     * @param memoryId The source memory ID
+     * @param radius Distance limit
+     * @param options Additional options
+     */
+    async findNearby(
+        memoryId: string,
+        radius: number,
+        options: { metric?: 'euclidean' | 'haversine'; limit?: number } = {}
+    ): Promise<AlloMemory[]> {
+        await this.ensureInitialized();
+        
+        const results = engramFindNearby(this.tree, memoryId, radius, options);
+        return results.map(r => this.toAlloMemory(r.node));
+    }
+    
+    /**
+     * V2.1: Set position on a memory for spatial queries
+     */
+    async setPosition(
+        memoryId: string,
+        position: { x: number; y: number; z?: number; pinned?: boolean }
+    ): Promise<void> {
+        await this.ensureInitialized();
+        const node = this.tree.get(memoryId);
+        if (!node) throw new Error(`Memory ${memoryId} not found`);
+        
+        this.tree.update(memoryId, { position });
+    }
+    
+    /**
+     * V2.1: Get position of a memory
+     */
+    getPosition(memoryId: string): { x: number; y: number; z?: number; pinned?: boolean } | null {
+        const node = this.tree.get(memoryId);
+        return node?.position || null;
     }
 
     /** Brute-force cosine similarity search — reliable for small datasets */

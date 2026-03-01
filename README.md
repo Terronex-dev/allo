@@ -12,6 +12,22 @@ Allo stores memories in a single `.engram` file, retrieves them by meaning using
 
 Built on [@terronex/engram](https://github.com/Terronex-dev/engram) and [@terronex/engram-trace-lite](https://github.com/Terronex-dev/engram-trace-lite).
 
+## Engram V2 — Graph Features
+
+Allo now supports Engram V2 graph capabilities:
+
+- **Typed Links** — Connect memories with meaning (`supports`, `contradicts`, `follows`)
+- **Graph Traversal** — Find paths and neighborhoods between memories
+- **Auto-Linking** — Automatically discover related memories by similarity
+- **Confidence Scores** — Track memory reliability
+
+```typescript
+const graph = allo.getGraph();
+graph.autoLinkSimilar(0.85);                    // Auto-link similar memories
+const related = graph.getLinkedNodes(memoryId); // Get connected memories
+const path = graph.findPath(startId, endId);    // Find reasoning chain
+```
+
 ## Install
 
 ```bash
