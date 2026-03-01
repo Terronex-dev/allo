@@ -52,6 +52,7 @@ export interface AlloMemory {
     confidence: number;
     source: string;
     wordCount: number;
+    position?: { x: number; y: number; z?: number; pinned?: boolean };  // V2.1
 }
 
 const HNSW_DIMS = 384;
