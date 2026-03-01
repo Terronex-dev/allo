@@ -14,6 +14,7 @@ import { theme, HEADER, HEADER_COMPACT, banner, separator, box, tierLabel } from
 import { loadConfig, saveConfig, configExists, createLLM, ProviderConfig } from './providers.js';
 import { runOnboarding } from './onboarding.js';
 import { discoverBrains, ensureBrainsDir, BrainInfo } from './brains.js';
+import { generateMap } from './map.js';
 
 const VERSION = '1.0.0';
 
@@ -1050,8 +1051,76 @@ program
     .option('-l, --limit <number>', 'Max results', '8')
     .option('-f, --file <path>', 'Memory file path')
     .option('-b, --brief', 'One-line summaries only (no interactive selection)')
+    .option('-m, --map', 'Show results on interactive map (requires spatial data)')
+    .option('--lat <number>', 'Center latitude for map', '0')
+    .option('--lng <number>', 'Center longitude for map', '0')
+    .option('--radius <number>', 'Search radius in km for spatial query', '1000')
     .action(async (query, options) => {
         const a = await getAllo(options);
+        
+        // Map mode: use spatial recall
+        if (options.map) {
+            const lat = parseFloat(options.lat);
+            const lng = parseFloat(options.lng);
+            const radius = parseFloat(options.radius);
+            
+            const spinner = ora(theme.muted(`Spatial search within ${radius}km...`)).start();
+            
+            // Use spatialRecall if center is specified, otherwise regular recall
+            let results;
+            if (lat !== 0 || lng !== 0) {
+                results = await a.spatialRecall(
+                    { x: lat, y: lng },
+                    radius,
+                    { metric: 'haversine', query }
+                );
+            } else {
+                // Regular recall, then filter for spatial data
+                const memories = await a.recall(query, parseInt(options.limit));
+                results = memories
+                    .filter(m => m.position)
+                    .map(m => ({
+                        node: {
+                            id: m.id,
+                            content: { data: m.content, type: 'text' as const },
+                            position: m.position
+                        },
+                        distance: 0
+                    }));
+                    
+                if (results.length === 0) {
+                    spinner.stop();
+                    console.log(theme.error('No spatial data found. Add positions with: allo position <id> --lat <lat> --lng <lng>'));
+                    return;
+                }
+                
+                // Calculate center from results
+                const avgLat = results.reduce((sum, r) => sum + r.node.position!.x, 0) / results.length;
+                const avgLng = results.reduce((sum, r) => sum + r.node.position!.y, 0) / results.length;
+                options.lat = avgLat;
+                options.lng = avgLng;
+            }
+            
+            spinner.stop();
+            
+            if (results.length === 0) {
+                console.log(theme.dim('No spatial results found.'));
+                return;
+            }
+            
+            console.log(theme.accent(`\nFound ${results.length} spatial result${results.length === 1 ? '' : 's'}`));
+            
+            const mapPath = await generateMap(
+                results as any,
+                { x: parseFloat(options.lat), y: parseFloat(options.lng) },
+                { title: `Allo: "${query}"` }
+            );
+            
+            console.log(theme.success(`Map generated: ${mapPath}`));
+            return;
+        }
+        
+        // Regular recall mode
         const spinner = ora(theme.muted(`Searching for "${query}"...`)).start();
         const memories = await a.recall(query, parseInt(options.limit));
         spinner.stop();

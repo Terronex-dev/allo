@@ -58,3 +58,23 @@
 - 1.6ms average recall latency, 609 queries/sec
 - P95: 2ms, P99: 7ms
 - Zero crashes on adversarial inputs
+
+## 1.3.0 (2026-03-01)
+
+### Features
+- **V2.2 Map Visualization**: `allo recall --map` opens results on interactive Leaflet map
+  - `--lat` and `--lng` to specify search center
+  - `--radius` for spatial query radius (km)
+  - Auto-centers on results if no center specified
+- Added `generateMap()` function for programmatic map generation
+- Position field now included in AlloMemory interface
+
+### Usage
+```bash
+# Map results for a query (auto-center)
+allo recall "capitals" --map
+
+# Spatial search with center
+allo recall "cities" --map --lat 48.8566 --lng 2.3522 --radius 1000
+```
+

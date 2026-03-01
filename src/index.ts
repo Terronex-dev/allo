@@ -7,6 +7,7 @@
  */
 
 export { Allo, AlloConfig, AlloMemory } from './allo.js';
+export { generateMap, MapOptions } from './map.js';
 export type { ConsolidateConfig, ConsolidationReport, Summarizer } from '@terronex/engram-trace-lite';
 export {
     ProviderConfig, LLMProvider, EmbeddingProvider, ChatMessage, ChatResponse,
