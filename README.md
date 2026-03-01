@@ -56,6 +56,27 @@ const related = await allo.findNearby(memoryId, 10);
 
 See [SPEC_V2.md](https://github.com/Terronex-dev/engram/blob/main/SPEC_V2.md) for the full format specification.
 
+## V2.2 — Map Visualization
+
+View spatial results on an interactive map:
+
+```bash
+# Open results on a Leaflet.js map
+allo recall "European capitals" --map
+
+# Spatial search with center point
+allo recall "cities" --map --lat 48.8566 --lng 2.3522 --radius 1000
+```
+
+Programmatic usage:
+
+```typescript
+import { generateMap } from '@terronex/allo';
+
+const results = await allo.spatialRecall({ x: 50, y: 10 }, 2000);
+await generateMap(results, { x: 50, y: 10 }, { title: 'My Map' });
+```
+
 ## Install
 
 ```bash
