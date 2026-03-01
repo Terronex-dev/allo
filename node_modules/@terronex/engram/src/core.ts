@@ -668,7 +668,7 @@ export function spatialRecall(
     const semanticResults = searchNodes(tree, queryEmbedding, {
       query: '',
       topK: Math.max(limit * 5, 100),
-      minScore: minScore,
+      minScore,
       includeArchived
     });
     

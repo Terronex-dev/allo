@@ -22,7 +22,7 @@ import {
 
 const MAGIC = Buffer.from('ENGRAM');
 const VERSION_MAJOR = 2;  // V2: Graph extensions
-const VERSION_MINOR = 0;
+const VERSION_MINOR = 1;  // V2.1: Spatial intelligence
 export const ENGRAM_EXTENSION = '.engram';
 const HEADER_OFFSET = 12; // magic(6) + version(2) + headerLen(4)
 
@@ -89,7 +89,7 @@ export async function writeEngram(
   // Build header (ensure V2 embedding config is present)
   const header: EngramHeader = {
     ...file.header,
-    version: [2, 0],
+    version: [VERSION_MAJOR, VERSION_MINOR],
     embedding: file.header.embedding ?? DEFAULT_EMBEDDING_CONFIG,
     security,
     modified: Date.now()
@@ -470,7 +470,7 @@ export function migrateV2toEngram(v2Data: AifBinV2): EngramFile {
   
   return {
     header: {
-      version: [2, 0],
+      version: [VERSION_MAJOR, VERSION_MINOR],
       created: v2Data.created,
       modified: now,
       

@@ -56,5 +56,5 @@ export {
 } from './io';
 
 // Version info
-export const VERSION = '2.1.0';
+export const VERSION = '2.1.2';
 export const FORMAT_VERSION = [2, 1] as const;

@@ -510,6 +510,7 @@ export class Allo {
             confidence: node.quality.confidence,
             source: node.quality.source,
             wordCount: words,
+            position: node.position,  // V2.1
         };
     }
 
