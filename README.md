@@ -28,6 +28,32 @@ const related = graph.getLinkedNodes(memoryId); // Get connected memories
 const path = graph.findPath(startId, endId);    // Find reasoning chain
 ```
 
+## V2.1 — Spatial Intelligence
+
+Find memories by location, not just meaning:
+
+```typescript
+// Set positions on memories
+await allo.setPosition(memoryId, { x: 48.8566, y: 2.3522 }); // Paris lat/lon
+
+// Find memories within 500km
+const nearby = await allo.spatialRecall(
+  { x: 48.8566, y: 2.3522 },
+  500,
+  { metric: 'haversine' }
+);
+
+// Hybrid: semantic + spatial
+const results = await allo.spatialRecall(
+  { x: 40.7128, y: -74.0060 },  // NYC
+  100,
+  { metric: 'haversine', query: 'coffee shops' }
+);
+
+// Find memories near another memory
+const related = await allo.findNearby(memoryId, 10);
+```
+
 ## Install
 
 ```bash
