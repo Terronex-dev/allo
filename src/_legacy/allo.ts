@@ -20,7 +20,7 @@ import {
     type ConsolidateConfig,
     type ConsolidationReport,
     type Summarizer,
-} from '@terronex/engram-trace-lite';
+} from '@terronex/engram-trace';
 
 env.allowRemoteModels = false;
 env.localModelPath = path.join(process.cwd(), 'models/');
@@ -537,7 +537,7 @@ export class Allo {
     }
 
     // =========================================================================
-    // Consolidation (powered by @terronex/engram-trace-lite)
+    // Consolidation (powered by @terronex/engram-trace)
     // =========================================================================
 
     /**

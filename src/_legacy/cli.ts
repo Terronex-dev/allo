@@ -691,7 +691,7 @@ async function doConsolidate(a: Allo, cfg: ProviderConfig): Promise<void> {
     console.log(theme.accent(`\n  Consolidating ${nodeCount} memories...\n`));
 
     // Build summarizer from configured LLM (if available)
-    let summarizer: import('@terronex/engram-trace-lite').Summarizer | undefined;
+    let summarizer: import('@terronex/engram-trace').Summarizer | undefined;
     if (cfg.llm) {
         const { createLLM: makeLLM } = await import('./providers.js');
         const llm = makeLLM(cfg);
